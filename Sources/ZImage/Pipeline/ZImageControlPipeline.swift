@@ -29,6 +29,15 @@ public struct ControlProgress: Sendable {
 }
 
 public typealias ControlProgressCallback = @Sendable (ControlProgress) -> Void
+
+public struct ZImageControlRuntimeOptions: Sendable {
+  public var logPhaseMemory: Bool
+
+  public init(logPhaseMemory: Bool = false) {
+    self.logPhaseMemory = logPhaseMemory
+  }
+}
+
 public struct ZImageControlGenerationRequest {
   public var prompt: String
   public var negativePrompt: String?
@@ -60,6 +69,7 @@ public struct ZImageControlGenerationRequest {
   public var progressCallback: ControlProgressCallback?
   public var enhancePrompt: Bool
   public var enhanceMaxTokens: Int
+  public var runtimeOptions: ZImageControlRuntimeOptions
   public init(
     prompt: String,
     negativePrompt: String? = nil,
@@ -81,7 +91,8 @@ public struct ZImageControlGenerationRequest {
     lora: LoRAConfiguration? = nil,
     progressCallback: ControlProgressCallback? = nil,
     enhancePrompt: Bool = false,
-    enhanceMaxTokens: Int = 512
+    enhanceMaxTokens: Int = 512,
+    runtimeOptions: ZImageControlRuntimeOptions = .init()
   ) {
     self.prompt = prompt
     self.negativePrompt = negativePrompt
@@ -104,6 +115,7 @@ public struct ZImageControlGenerationRequest {
     self.progressCallback = progressCallback
     self.enhancePrompt = enhancePrompt
     self.enhanceMaxTokens = enhanceMaxTokens
+    self.runtimeOptions = runtimeOptions
   }
 
   #if canImport(CoreGraphics)
@@ -127,7 +139,8 @@ public struct ZImageControlGenerationRequest {
       lora: LoRAConfiguration? = nil,
       progressCallback: ControlProgressCallback? = nil,
       enhancePrompt: Bool = false,
-      enhanceMaxTokens: Int = 512
+      enhanceMaxTokens: Int = 512,
+      runtimeOptions: ZImageControlRuntimeOptions = .init()
     ) {
       self.prompt = prompt
       self.negativePrompt = negativePrompt
@@ -153,6 +166,7 @@ public struct ZImageControlGenerationRequest {
       self.progressCallback = progressCallback
       self.enhancePrompt = enhancePrompt
       self.enhanceMaxTokens = enhanceMaxTokens
+      self.runtimeOptions = runtimeOptions
     }
   #endif
 }
@@ -219,6 +233,11 @@ public class ZImageControlPipeline {
         headDim: config.headDim
       )
     )
+  }
+
+  private func logControlMemory(_ phase: String, enabled: Bool) {
+    guard enabled else { return }
+    ControlMemoryTelemetry.logPhase(phase, logger: logger)
   }
 
   private func loadTransformer(snapshot _: URL, config: ZImageTransformerConfig) throws -> ZImageTransformer2DModel {
@@ -352,7 +371,8 @@ public class ZImageControlPipeline {
       vae: AutoencoderKL,
       vaeConfig: ZImageVAEConfig,
       pixelH: Int,
-      pixelW: Int
+      pixelW: Int,
+      logPhaseMemory: Bool
     ) throws -> MLXArray {
       let vaeDType = vae.dtype
       let imageArray = try QwenImageIO.resizedPixelArray(
@@ -363,6 +383,7 @@ public class ZImageControlPipeline {
         dtype: vaeDType
       )
       let normalized = QwenImageIO.normalizeForEncoder(imageArray)
+      logControlMemory("control-vae.encode.control.before", enabled: logPhaseMemory)
       let encodedLatents = vae.encode(normalized)
       let latentChannels = vaeConfig.latentChannels
       let latents = encodedLatents[0..., 0..<latentChannels, 0..., 0...]
@@ -423,7 +444,8 @@ public class ZImageControlPipeline {
       vae: AutoencoderKL,
       vaeConfig: ZImageVAEConfig,
       targetHeight: Int,
-      targetWidth: Int
+      targetWidth: Int,
+      logPhaseMemory: Bool
     ) throws -> MLXArray {
       let vaeDivisor = vaeConfig.latentDivisor
       let latentH = max(1, targetHeight / vaeDivisor)
@@ -441,7 +463,8 @@ public class ZImageControlPipeline {
             vae: vae,
             vaeConfig: vaeConfig,
             pixelH: pixelH,
-            pixelW: pixelW
+            pixelW: pixelW,
+            logPhaseMemory: logPhaseMemory
           )
         } else {
           MLX.zeros([1, vaeConfig.latentChannels, latentH, latentW], dtype: vaeDType)
@@ -483,6 +506,7 @@ public class ZImageControlPipeline {
           maskedNormalized = normalized * keepMask.asType(normalized.dtype)
         }
         MLX.eval(maskedNormalized)
+        logControlMemory("control-vae.encode.inpaint.before", enabled: logPhaseMemory)
         let latentChannels = vaeConfig.latentChannels
         let encoded = vae.encode(maskedNormalized)
         let latents = encoded[0..., 0..<latentChannels, 0..., 0...]
@@ -521,7 +545,8 @@ public class ZImageControlPipeline {
         vae: vae,
         vaeConfig: vaeConfig,
         targetHeight: targetHeight,
-        targetWidth: targetWidth
+        targetWidth: targetWidth,
+        logPhaseMemory: false
       )
     }
   #endif
@@ -611,6 +636,7 @@ public class ZImageControlPipeline {
 
   // swiftlint:disable:next cyclomatic_complexity
   private func generateCore(_ request: ZImageControlGenerationRequest) async throws -> MLXArray {
+    let logPhaseMemory = request.runtimeOptions.logPhaseMemory
     let requestedModelId = request.model ?? ZImageRepository.id
     let requestedWeightsVariant = ZImageFiles.normalizedWeightsVariant(request.weightsVariant)
     let requestedControlnetId = request.controlnetWeights
@@ -850,8 +876,10 @@ public class ZImageControlPipeline {
           negativeEmbeds = nil
           MLX.eval(promptEmbeds)
         }
+        logControlMemory("prompt-embeddings.ready", enabled: logPhaseMemory)
       }
       Memory.clearCache()
+      logControlMemory("prompt-embeddings.after-clear-cache", enabled: logPhaseMemory)
       cachedPromptEmbedding = CachedPromptEmbedding(
         prompt: request.prompt,
         negativePrompt: request.negativePrompt,
@@ -873,6 +901,7 @@ public class ZImageControlPipeline {
         logger.info(
           "Building control context (control=\(controlCG != nil), inpaint=\(inpaintCG != nil), mask=\(maskCG != nil))..."
         )
+        logControlMemory("control-context.before-build", enabled: logPhaseMemory)
         let result = try buildControlContext(
           controlImage: controlCG,
           inpaintImage: inpaintCG,
@@ -880,9 +909,11 @@ public class ZImageControlPipeline {
           vae: vae,
           vaeConfig: modelConfigs.vae,
           targetHeight: request.height,
-          targetWidth: request.width
+          targetWidth: request.width,
+          logPhaseMemory: logPhaseMemory
         )
         MLX.eval(result)
+        logControlMemory("control-context.after-eval", enabled: logPhaseMemory)
         logger.info("Control context built, shape: \(result.shape)")
         controlContext = result.asType(vae.dtype)
       }
@@ -949,6 +980,7 @@ public class ZImageControlPipeline {
         try await applyLoRAIfNeeded(loraConfig)
       }
     }
+    logControlMemory("denoising.before-start", enabled: logPhaseMemory)
     logger.info("Running \(request.steps) denoising steps with control_context_scale=\(request.controlContextScale)...")
     do {
       guard let transformer else {
@@ -1022,7 +1054,10 @@ public class ZImageControlPipeline {
         fractionCompleted: 1.0
       ))
     logger.info("Denoising complete, decoding latents...")
-    return PipelineUtilities.decodeLatents(latents, vae: vae, height: request.height, width: request.width)
+    let decoded = PipelineUtilities.decodeLatents(latents, vae: vae, height: request.height, width: request.width)
+    MLX.eval(decoded)
+    logControlMemory("decode.after-eval", enabled: logPhaseMemory)
+    return decoded
   }
 
   #if canImport(CoreGraphics)

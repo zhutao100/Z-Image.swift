@@ -483,6 +483,7 @@ enum ZImageCLI {
     var cacheLimit: Int?
     var maxSequenceLength = 512
     var noProgress = false
+    var logControlMemory = false
 
     var iterator = args.makeIterator()
     while let arg = iterator.next() {
@@ -523,6 +524,8 @@ enum ZImageCLI {
         cacheLimit = intValue(for: arg, iterator: &iterator, minimum: 1, fallback: 2048)
       case "--max-sequence-length":
         maxSequenceLength = intValue(for: arg, iterator: &iterator, minimum: 64, fallback: 512)
+      case "--log-control-memory":
+        logControlMemory = true
       case "--no-progress":
         noProgress = true
       case "--help", "-h":
@@ -619,7 +622,8 @@ enum ZImageCLI {
       controlnetWeights: controlnetWeights,
       controlnetWeightsFile: controlnetWeightsFile,
       maxSequenceLength: maxSequenceLength,
-      progressCallback: progressCallback
+      progressCallback: progressCallback,
+      runtimeOptions: .init(logPhaseMemory: logControlMemory)
     )
 
     let pipeline = ZImageControlPipeline(logger: logger)
@@ -663,6 +667,7 @@ enum ZImageCLI {
         --weights-variant         Weights precision variant (e.g. fp16, bf16)
         --cache-limit             GPU memory cache limit in MB (default: unlimited)
         --max-sequence-length     Maximum sequence length for text encoding (default: 512)
+        --log-control-memory      Emit resident and MLX memory markers for control-path phases
         --no-progress             Disable progress output
         --help, -h                Show help
 

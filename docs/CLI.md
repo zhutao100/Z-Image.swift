@@ -90,6 +90,10 @@ For inpainting, provide `--inpaint-image` and `--mask`:
 
 Run `./ZImageCLI control --help` for the complete option list and control image expectations.
 
+Useful control-only diagnostics:
+
+- `--log-control-memory` emits process-resident and MLX memory markers around prompt encoding, control-context construction, denoising start, and final decode.
+
 ## Quantization
 
 Quantize the base model:
