@@ -11,7 +11,6 @@ If you’re new here, start with the root `README.md` for a runnable quickstart.
 3. [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — code-level architecture and “where to look”.
 4. [`docs/z-image-turbo.md`](z-image-turbo.md), [`docs/z-image.md`](z-image.md)— upstream model layout notes (Diffusers/HF reference).
 5. [`docs/dev_plans/ROADMAP.md`](dev_plans/ROADMAP.md) — prioritized next steps.
-6. [`docs/dev_plans/control-context-memory-remediation.md`](dev_plans/control-context-memory-remediation.md) — concrete patch plan for the large-image control-path memory surge.
 
 ## “Source Of Truth” Pointers
 
@@ -23,6 +22,12 @@ If you’re new here, start with the root `README.md` for a runnable quickstart.
 - Quantization: `Sources/ZImage/Quantization/ZImageQuantization.swift`
 - LoRA: `Sources/ZImage/LoRA/*`
 - Unit tests: `Tests/ZImageTests/*`
+
+## Current context / investigations
+
+- [`docs/context/zimage_runtime_precision_parity_report.md`](context/zimage_runtime_precision_parity_report.md) — confirmed parity, confirmed mismatches, and runtime hypotheses for Swift vs Diffusers precision handling.
+- [`docs/context/mlx_pytorch_bf16_inference_dtype_deep_dive.md`](context/mlx_pytorch_bf16_inference_dtype_deep_dive.md) — backend-level BF16 behavior notes for MLX and PyTorch/MPS.
+- [`docs/context/precision_formats_on_apple_silicon.md`](context/precision_formats_on_apple_silicon.md) — broader Apple Silicon precision-format background.
 
 ## Archive
 

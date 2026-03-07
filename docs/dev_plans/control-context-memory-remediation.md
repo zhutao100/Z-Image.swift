@@ -505,5 +505,5 @@ Treat the remediation as successful when the `1536x2304` control reference case 
 
 ## Relationship To Existing Notes
 
-- `docs/debug_notes/control-memory-phased-plan.md` records the earlier diagnosis.
+- `docs/archive/debug_notes/control-memory-phased-plan.md` records the earlier diagnosis.
 - This plan supersedes that note for implementation because the repo already landed some of the earlier fixes and now has a different baseline.
