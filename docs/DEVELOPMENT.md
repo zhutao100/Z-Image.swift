@@ -60,9 +60,11 @@ Watch `control-context.after-baseline-reduction`, `control-context.after-eval`, 
 
 - keep `--log-control-memory` as the supported probe
 - unload transformer, ControlNet, and active LoRA state before `buildControlContext(...)`
+- load the control-path VAE encoder on demand and unload it immediately after the typed control context is materialized
 - materialize the stored control-context tensor and clear cache before transformer/controlnet reload
+- defer decoder-only VAE loading until final decode, then unload it after `decode.after-eval`
 - keep query-chunked VAE self-attention on by default
-- skip tiled encode and VAE lifecycle splitting unless new measurements show a pathological regression again
+- skip tiled encode unless new measurements show a pathological regression again
 
 ## Performance & Memory Notes
 

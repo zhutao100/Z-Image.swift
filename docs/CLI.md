@@ -94,7 +94,7 @@ Useful control-only diagnostics:
 
 - `--log-control-memory` emits process-resident and MLX memory markers around prompt encoding, control-context construction, the post-build cache-release barrier, denoising start, and final decode.
 
-The control pipeline now unloads the transformer, ControlNet, and active LoRA state before `buildControlContext(...)`, then reloads them before denoising. The temporary attention-disable CLI switch used during the remediation investigation was removed after it failed to lower the measured peak materially.
+The control pipeline now unloads the transformer, ControlNet, and active LoRA state before `buildControlContext(...)`, loads an encoder-only VAE only for control or inpaint encode, then reloads the transformer stack before denoising and defers decoder-only VAE loading until final decode. The temporary attention-disable CLI switch used during the remediation investigation was removed after it failed to lower the measured peak materially.
 
 ## Quantization
 
