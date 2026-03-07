@@ -11,6 +11,7 @@ If you’re new here, start with the root `README.md` for a runnable quickstart.
 3. [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — code-level architecture and “where to look”.
 4. [`docs/z-image-turbo.md`](z-image-turbo.md), [`docs/z-image.md`](z-image.md)— upstream model layout notes (Diffusers/HF reference).
 5. [`docs/dev_plans/ROADMAP.md`](dev_plans/ROADMAP.md) — prioritized next steps.
+6. [`docs/dev_plans/control-context-memory-remediation.md`](dev_plans/control-context-memory-remediation.md) — concrete patch plan for the large-image control-path memory surge.
 
 ## “Source Of Truth” Pointers
 
