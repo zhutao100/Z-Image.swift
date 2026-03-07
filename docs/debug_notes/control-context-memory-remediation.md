@@ -1,185 +1,151 @@
-I inspected the Swift repo, the local Diffusers reference, and current external backend docs. I did not execute the model here, so this is a source-based diagnosis.
+# Control-Context Memory Remediation
 
-## Conclusion
+Validated on March 7, 2026 against the current Swift repo state.
 
-The **100 GB-looking spike is not explained by the final `control_context` tensor**. The dominant causes are:
+This note replaces older conclusions that became partially stale after the control-path unload work, the VAE attention chunking change, and the phase-memory telemetry landed.
 
-1. **Full-resolution VAE encode during control-context build** in `ZImageControlPipeline.buildControlContext(...)`.
-2. **Large post-build MLX/Metal cache retention before transformer/controlnet are reloaded**, which can make Activity Monitor show a much larger footprint than the live tensors alone.
-3. **Additional control-mode denoising overhead** from the control transformer’s stacked hint tensors, which normal mode does not have.
+## Validation Basis
 
-## What the code confirms
-
-### 1) The hot path is still full-resolution VAE encode
-
-For pure control mode, Swift does:
-
-* `buildControlContext(...)`
-* `encodeImageToLatents(...)`
-* `vae.encode(normalized)`
-
-That is the same high-level algorithm Diffusers uses in `pipeline_z_image_controlnet.py`: it preprocesses the control image, runs `vae.encode(control_image)`, rescales, then unsqueezes to the control-context shape.
-
-So the core issue is **not** that Swift is doing a fundamentally different control algorithm.
-
-### 2) The final control tensor is tiny
-
-Your logged shape is:
-
-* `[1, 33, 1, 288, 192]`
-
-That is only about:
-
-* **~3.4 MiB in BF16**
-* **~6.8 MiB in FP32**
-
-So the spike is clearly happening **while constructing it**, not from retaining it.
-
-### 3) The old “easy” causes are already mitigated in this repo
-
-The current source already has both of these mitigations:
-
-* unload transformer/controlnet before `buildControlContext(...)`
-* chunk VAE mid-block attention queries (`defaultQueryChunkSize = 1024`)
-
-So this is **not** just “transformer wasn’t unloaded” or “attention was fully quadratic with no chunking”.
-
-### 4) The biggest remaining code-level amplifier is cache retention after build
-
-This is the most important concrete finding in the current source.
-
-In `generateCore(...)`, after:
-
-* `let result = try buildControlContext(...)`
-* `MLX.eval(result)`
-* `controlContext = result.asType(vae.dtype)`
-
-the pipeline **does not call `Memory.clearCache()` before reloading transformer/controlnet**.
-
-That matters because the repo’s own remediation note says the retained policy still left roughly **~28 GiB of MLX cache after control-context build** on the reference run. If that cache stays resident while transformer + controlnet are reloaded, the apparent process footprint can balloon even though the live control tensor is tiny.
-
-This matches your symptom very well.
-
-### 5) Control denoising is intrinsically heavier than normal denoising
-
-Even after the control context is built, control mode has an extra memory burden that normal mode does not:
-
-* `ZImageControlTransformerBlock` repeatedly does `MLX.stacked(allC, axis: 0)`
-* the control config uses **15 `controlLayersPlaces`** and **2 `controlRefinerLayersPlaces`**
-* at `1536x2304`, the control/image sequence length is `13824`, and each `[seq, dim]` BF16 hidden state at `dim=3840` is about **~100 MiB**
-
-So stacked control-hint state can easily reach **~1.5+ GiB per stacked tensor family** before counting attention/FFN intermediates. That explains why control mode remains materially heavier than normal mode during denoising.
-
-## Why Diffusers/MPS can look much smaller
-
-Two things are likely being conflated.
-
-First, **metric mismatch**. Apple’s VM Tracker / Metal memory guidance distinguishes process footprint from simple heap allocations, and VM Tracker’s footprint includes **noncompressed plus compressed/swapped dirty memory**. Activity Monitor likewise exposes compressed memory and swap, not just “currently live tensor bytes.” ([Apple Developer][1])
-
-Second, PyTorch on MPS explicitly separates:
-
-* `current_allocated_memory()` = memory occupied by tensors, **excluding cached allocator pools**
-* `driver_allocated_memory()` = total Metal-driver allocation, **including cached pools and MPS/MPSGraph allocations** ([PyTorch Docs][2])
-
-So “Diffusers looked smaller on MPS” is not necessarily an apples-to-apples comparison unless you compare the same metric on both sides.
-
-There is also an ecosystem difference: the current Z-Image guidance in DiffSynth recommends **CPU offloading / VRAM management** for Z-Image rather than keeping everything resident. The Swift port does not yet have an equivalent sequential offload policy. ([GitHub][3])
-
-Also, your requested resolution is **within** the model family’s published range, so this is not simply “unsupported resolution abuse.” ([Hugging Face][4])
-
-## Root-cause buckets
-
-### Confirmed
-
-* `buildControlContext(...)` is dominated by **full-resolution VAE encode**
-* the final stored control-context tensor is **not** the memory problem
-* the repo already unloads transformer/controlnet before build
-* the repo already chunks VAE mid-block attention
-* there is **no cache clear after control-context build and before transformer/controlnet reload**
-* control denoising adds major extra memory via **stacked hint tensors**
-
-### Likely, but needs measurement on your machine
-
-* The **~100 GB Activity Monitor peak** is probably a **compound footprint**:
-
-  * VAE encode workspace/cache retained after build
-  * then transformer/controlnet reload
-  * then possibly initial denoising setup
-* MLX/Metal caching and Activity Monitor update cadence are likely making the build/reload boundary look like one giant spike
-
-## Best improvement options
-
-### 1) Add a hard cache-release barrier immediately after control-context build
-
-Highest ROI, lowest risk.
-
-Right after control-context materialization:
-
-* assign `controlContext`
-* `MLX.eval(controlContext)`
-* `Memory.clearCache()`
-* log a new phase like `control-context.after-clear-cache`
-
-This directly targets the most plausible reason your footprint still looks enormous after the repo’s prior mitigations.
-
-### 2) Split VAE lifecycle into encoder-only for control build
-
-Load only the VAE encoder for control/inpaint encode, then release it before reloading transformer/controlnet. Keep decoder loading deferred until final decode.
-
-That prevents encoder residency/workspace from overlapping with the next heavy phase.
-
-### 3) Add tiled/sliced VAE encode for control images
-
-This is the strongest structural fix for the build spike itself.
-
-The current pure-control path still runs the encoder over the full 1536×2304 image in one pass. Tiling with overlap would trade some latency and implementation complexity for a much flatter peak.
-
-### 4) Rework control hint transport to avoid `stacked(allC)`
-
-This targets denoising memory, not build memory.
-
-Instead of repeatedly stacking full-sequence tensors, return only the newly emitted hint and the latest control state, or carry a lightweight list/tuple-like structure until the final dictionary emission.
-
-That should materially reduce control-mode denoising overhead.
-
-### 5) Optional: add offload policies for text encoder / controlnet
-
-This is secondary for your specific build spike, but useful overall:
-
-* sequential text-encoder load/unload
-* optional controlnet offload outside active denoise
-* optional GGUF / quantized text encoder path for prompt encoding
-
-## What I would measure next
-
-Use the existing flag that is already in this repo:
+- Source inspection of:
+  - `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
+  - `Sources/ZImage/Model/VAE/AutoencoderKL.swift`
+  - `Sources/ZImage/Model/Transformer/ZImageControlTransformer2D.swift`
+  - `Sources/ZImage/Model/Transformer/ZImageControlTransformerBlock.swift`
+- Source inspection of the local Diffusers reference:
+  - `~/workspace/custom-builds/diffusers/src/diffusers/pipelines/z_image/pipeline_z_image_controlnet.py`
+- One measured high-resolution control probe on March 7, 2026:
 
 ```bash
-.build/xcode/Build/Products/Release/ZImageCLI control \
-  --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors \
-  --control-image "[control_image_path]" \
+./.build/xcode/Build/Products/Release/ZImageCLI control \
+  --prompt "memory validation" \
+  --control-image images/canny.jpg \
+  --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
+  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors \
   --width 1536 \
   --height 2304 \
-  --prompt "[prompt]" \
-  --negative-prompt "[negative_prompt]" \
   --steps 1 \
+  --guidance 0 \
+  --seed 1234 \
   --log-control-memory \
-  --output /tmp/zimage-control-test.png
+  --no-progress \
+  --output /tmp/zimage-control-remediation/phase0_memory.png
 ```
 
-The key comparison is:
+Diffusers was not executed in this validation pass. Any statement below about Diffusers behavior is source-based unless explicitly marked as measured.
 
-* `control-context.after-baseline-reduction`
-* `control-context.after-eval`
-* a new `control-context.after-clear-cache` phase if you add it
-* `denoising.before-start`
+## Current Verdict
 
-If `after-eval` is huge and `after-clear-cache` collapses, you have isolated the main issue.
+The large control-path memory footprint is still not caused by the stored `controlContext` tensor itself. The current dominant contributors are:
 
-The single most actionable takeaway is this: **the current repo still appears to be missing a post-control-build cache flush before transformer/controlnet reload, and that is the first thing I would change.**
+1. full-resolution VAE encode during `buildControlContext(...)`
+2. retained MLX cache after control-context materialization and before transformer/controlnet reload
+3. repeated ControlNet hint stacking during denoising
 
-[1]: https://developer.apple.com/documentation/xcode/analyzing-the-memory-usage-of-your-metal-app?utm_source=chatgpt.com "Analyzing the memory usage of your Metal app"
-[2]: https://docs.pytorch.org/docs/stable/generated/torch.mps.current_allocated_memory.html "torch.mps.current_allocated_memory — PyTorch 2.10 documentation"
-[3]: https://github.com/modelscope/DiffSynth-Studio/blob/main/README.md "DiffSynth-Studio/README.md at main · modelscope/DiffSynth-Studio · GitHub"
-[4]: https://huggingface.co/Tongyi-MAI/Z-Image "Tongyi-MAI/Z-Image · Hugging Face"
+The final control tensor shape from the measured high-resolution run was `[1, 33, 1, 288, 192]`. That is only a few MiB in bf16 or fp32. The large footprint comes from how it is built and what remains cached afterward, not from the tensor that is ultimately kept.
+
+## What Is Already True In The Current Repo
+
+These older failure modes are no longer current:
+
+- `ZImageControlPipeline` unloads the transformer, ControlNet, and active LoRA state before `buildControlContext(...)`.
+- prompt-embedding cache cleanup already happens before the control build begins.
+- the VAE mid-block self-attention path is query-chunked by default via `VAEAttention.defaultQueryChunkSize = 1024`.
+- `--log-control-memory` already emits resident, active, cache, and peak markers around the main control-path phases.
+
+Those mitigations are already visible in the measured baseline:
+
+- `control-context.after-baseline-reduction`: resident `371.59 MiB`, active `162.37 MiB`, cache `0 B`
+- `control-context.before-build`: resident `371.59 MiB`, active `162.37 MiB`, cache `0 B`
+
+So the current problem is not "the transformer stayed resident during control-context build" and not "the VAE attention path is still fully unchunked."
+
+## What Is Still True In The Current Repo
+
+### 1. There is still no hard cache-release barrier after control-context materialization
+
+In `generateCore(...)`, the control path does:
+
+- `let result = try buildControlContext(...)`
+- `MLX.eval(result)`
+- `controlContext = result.asType(vae.dtype)`
+- immediately proceeds toward transformer/controlnet reload
+
+There is still no `Memory.clearCache()` between the typed control-context handoff and the reload of the heavy denoising modules.
+
+The measured probe shows why this still matters:
+
+- `control-context.after-eval`: resident `464.34 MiB`, active `172.72 MiB`, cache `28.07 GiB`
+- `denoising.before-start`: resident `29.63 GiB`, active `29.34 GiB`, cache `28.08 GiB`
+
+Interpretation: the control-context build itself finishes with low resident bytes but a very large retained MLX cache, and that cache is still present when transformer/controlnet residency returns.
+
+### 2. The control pipeline still keeps a full `AutoencoderKL` resident
+
+`ZImageControlPipeline` currently loads a full `AutoencoderKL` even though the control build only needs the encoder and the final image write only needs the decoder.
+
+By contrast, `ZImagePipeline` already uses `AutoencoderDecoderOnly` for the normal text-to-image path.
+
+That means the control path still has an obvious lifecycle-splitting opportunity:
+
+- load an encoder-only VAE on demand for control/inpaint encode
+- release it after control-context materialization
+- defer decoder-only residency until the final decode
+
+### 3. Denoising still pays for stacked ControlNet hint transport
+
+`ZImageControlTransformerBlock` still returns `MLX.stacked(allC, axis: 0)` after appending the new skip hint and updated control state.
+
+That means each control layer repeatedly rebuilds a stacked tensor containing:
+
+- all prior hints
+- the new hint
+- the current control state
+
+This is structurally heavier than carrying the current control state plus an incrementally grown hint list, and it directly targets denoising memory rather than the control-context build spike.
+
+## What The Measured Baseline Says
+
+Measured high-resolution control probe, March 7, 2026:
+
+- `prompt-embeddings.after-clear-cache`: resident `36.08 GiB`, active `29.34 GiB`, cache `0 B`
+- `control-context.after-baseline-reduction`: resident `371.59 MiB`, active `162.37 MiB`, cache `0 B`
+- `control-context.after-eval`: resident `464.34 MiB`, active `172.72 MiB`, cache `28.07 GiB`
+- `denoising.before-start`: resident `29.63 GiB`, active `29.34 GiB`, cache `28.08 GiB`
+- `decode.after-eval`: resident `124.06 MiB`, active `192.86 MiB`, cache `38.95 GiB`, MLX peak `39.03 GiB`
+- `/usr/bin/time -l` maximum resident set size: `42,832,363,520` bytes
+- `/usr/bin/time -l` peak memory footprint: `112,574,979,616` bytes
+
+Two points matter here:
+
+1. The build-time baseline reduction is working. The repo now really does collapse resident memory before the control VAE encode.
+2. The build output still leaves behind enough retained cache to make the reload boundary expensive.
+
+The `/usr/bin/time -l` footprint is much higher than the MLX "peak" counter, which is expected. They are not the same metric.
+
+## Diffusers Parity Check
+
+The local Diffusers control pipeline still does the same high-level control-image preparation:
+
+- preprocess control image
+- `self.vae.encode(control_image)`
+- shift/scale to latent space
+- `unsqueeze(2)` for control-context shape
+
+That means the Swift port is not paying the control-context cost because it invented a different algorithm. The remaining gap is about residency policy and data transport, not about basic control-image semantics.
+
+## Ranked Remediation Order
+
+1. Add a post-build materialization barrier:
+   - cast to the stored dtype
+   - `MLX.eval` the typed tensor
+   - `Memory.clearCache()`
+   - log a new phase such as `control-context.after-clear-cache`
+2. Split the control VAE lifecycle:
+   - encoder-only on demand for control/inpaint encode
+   - decoder-only deferred until final decode
+3. Remove stacked hint transport:
+   - keep current control state separate from accumulated hints
+   - stop rebuilding `MLX.stacked(...)` at every control block
+4. Only consider tiled/sliced encode if the first three phases still leave an unacceptable high-resolution spike
+
+The measured execution plan for these changes lives in `docs/dev_plans/control-context-memory-remediation.md`.
