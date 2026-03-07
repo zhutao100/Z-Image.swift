@@ -111,7 +111,7 @@ Acceptance criteria:
 
 ## Phase 2: On-Demand Control VAE Encoder And Deferred Decoder
 
-Status: pending
+Status: completed on March 7, 2026
 
 Objective:
 
@@ -202,3 +202,31 @@ Acceptance criteria:
     - the retained cache at `denoising.before-start` collapsed from about `28 GiB` to effectively zero
     - peak memory footprint improved by `24.11 GiB`, while maximum RSS stayed effectively flat
     - the fixed-seed control output remained bit-identical to phase 0
+- Phase 2: completed on March 7, 2026.
+  - Scope landed:
+    - add `AutoencoderEncoderOnly` beside the existing decoder-only VAE path
+    - load VAE encoder weights only when control or inpaint inputs must be encoded
+    - unload the encoder immediately after the typed control-context tensor is materialized
+    - defer decoder-only loading until final decode, then unload it after `decode.after-eval`
+    - add `VAEComponentTests` to confirm encoder-only and decoder-only parity with the full autoencoder
+  - Phase 2 high-resolution memory probe:
+    - `prompt-embeddings.after-clear-cache`: resident `35.58 GiB`, active `29.18 GiB`, cache `0 B`
+    - `control-context.after-baseline-reduction`: resident `273.34 MiB`, active `67.87 MiB`, cache `0 B`
+    - `control-context.after-eval`: resident `365.64 MiB`, active `78.22 MiB`, cache `28.07 GiB`
+    - `control-context.after-clear-cache`: resident `325.14 MiB`, active `71.36 MiB`, cache `0 B`
+    - `denoising.before-start`: resident `29.50 GiB`, active `29.19 GiB`, cache `65.30 MiB`
+    - `decode.after-eval`: resident `420.88 MiB`, active `127.48 MiB`, cache `39.00 GiB`, MLX peak `38.88 GiB`
+    - `/usr/bin/time -l` maximum resident set size: `42,659,020,800` bytes
+    - `/usr/bin/time -l` peak memory footprint: `86,580,223,280` bytes
+  - Phase 2 fixed-seed quality probe:
+    - output SHA-256: `2afd1fa9ba4398ad2b8b53510f44d602d5d7d5cc2631cee99d35c6d0752f8f70`
+    - phase 2 vs phase 0 MAE: `0.0000`
+    - phase 2 vs phase 0 max abs pixel delta: `0`
+    - phase 2 vs phase 0 PSNR: `inf`
+    - phase 2 vs phase 1 MAE: `0.0000`
+    - phase 2 vs phase 1 max abs pixel delta: `0`
+    - phase 2 vs phase 1 PSNR: `inf`
+  - Assessment:
+    - the control build now starts from a materially lower resident baseline than phase 1 because the full VAE no longer stays live between prompt encoding and control-context construction
+    - the post-build reload boundary stayed clean, while maximum RSS and peak memory footprint both improved modestly again
+    - the fixed-seed control output remained bit-identical to phase 0 and phase 1

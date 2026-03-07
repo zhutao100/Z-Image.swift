@@ -186,7 +186,8 @@ public class ZImageControlPipeline {
 
   private var logger: Logger
   private var tokenizer: QwenTokenizer?
-  private var vae: AutoencoderKL?
+  private var vaeEncoder: VAEImageEncoding?
+  private var vaeDecoder: VAEImageDecoding?
   private var transformer: ZImageTransformer2DModel?
   private var controlnet: ZImageControlNetModel?
   private var modelConfigs: ZImageModelConfigs?
@@ -242,6 +243,21 @@ public class ZImageControlPipeline {
 
   private func loadTransformer(snapshot _: URL, config: ZImageTransformerConfig) throws -> ZImageTransformer2DModel {
     ZImageTransformer2DModel(configuration: config)
+  }
+
+  private func makeVAEConfiguration(from config: ZImageVAEConfig) -> VAEConfig {
+    .init(
+      inChannels: config.inChannels,
+      outChannels: config.outChannels,
+      latentChannels: config.latentChannels,
+      scalingFactor: config.scalingFactor,
+      shiftFactor: config.shiftFactor,
+      blockOutChannels: config.blockOutChannels,
+      layersPerBlock: config.layersPerBlock,
+      normNumGroups: config.normNumGroups,
+      sampleSize: config.sampleSize,
+      midBlockAddAttention: config.midBlockAddAttention
+    )
   }
 
   private func makeControlnetConfig(from config: ZImageTransformerConfig) -> ZImageControlNetConfig {
@@ -303,20 +319,56 @@ public class ZImageControlPipeline {
     return controlnet
   }
 
-  private func loadVAE(snapshot _: URL, config: ZImageVAEConfig) throws -> AutoencoderKL {
-    AutoencoderKL(
-      configuration: .init(
-        inChannels: config.inChannels,
-        outChannels: config.outChannels,
-        latentChannels: config.latentChannels,
-        scalingFactor: config.scalingFactor,
-        shiftFactor: config.shiftFactor,
-        blockOutChannels: config.blockOutChannels,
-        layersPerBlock: config.layersPerBlock,
-        normNumGroups: config.normNumGroups,
-        sampleSize: config.sampleSize,
-        midBlockAddAttention: config.midBlockAddAttention
-      ))
+  private func loadVAEEncoder(snapshot _: URL, config: ZImageVAEConfig) throws -> AutoencoderEncoderOnly {
+    AutoencoderEncoderOnly(configuration: makeVAEConfiguration(from: config))
+  }
+
+  private func loadVAEDecoder(snapshot _: URL, config: ZImageVAEConfig) throws -> AutoencoderDecoderOnly {
+    AutoencoderDecoderOnly(configuration: makeVAEConfiguration(from: config))
+  }
+
+  private func applyVAEWeights(to module: Module, snapshot: URL) throws {
+    let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
+    let vaeWeights = try weightsMapper.loadVAE()
+    ZImageWeightsMapping.applyVAE(weights: vaeWeights, to: module, manifest: quantManifest, logger: logger)
+  }
+
+  private func prepareVAEEncoder(snapshot: URL, config: ZImageVAEConfig) throws -> VAEImageEncoding {
+    if let vaeEncoder {
+      logger.info("Reusing cached VAE encoder")
+      return vaeEncoder
+    }
+
+    logger.info("Loading VAE encoder...")
+    let encoder = try loadVAEEncoder(snapshot: snapshot, config: config)
+    try applyVAEWeights(to: encoder, snapshot: snapshot)
+    vaeEncoder = encoder
+    return encoder
+  }
+
+  private func prepareVAEDecoder(snapshot: URL, config: ZImageVAEConfig) throws -> VAEImageDecoding {
+    if let vaeDecoder {
+      logger.info("Reusing cached VAE decoder")
+      return vaeDecoder
+    }
+
+    logger.info("Loading VAE decoder...")
+    let decoder = try loadVAEDecoder(snapshot: snapshot, config: config)
+    try applyVAEWeights(to: decoder, snapshot: snapshot)
+    vaeDecoder = decoder
+    return decoder
+  }
+
+  private func unloadVAEEncoder() {
+    guard vaeEncoder != nil else { return }
+    vaeEncoder = nil
+    logger.info("VAE encoder unloaded")
+  }
+
+  private func unloadVAEDecoder() {
+    guard vaeDecoder != nil else { return }
+    vaeDecoder = nil
+    logger.info("VAE decoder unloaded")
   }
 
   private func encodePrompt(_ prompt: String, tokenizer: QwenTokenizer, textEncoder: QwenTextEncoder, maxLength: Int)
@@ -333,7 +385,7 @@ public class ZImageControlPipeline {
 
   private func loadControlImage(
     url: URL,
-    vae: AutoencoderKL,
+    vae: VAEImageEncoding,
     vaeConfig: ZImageVAEConfig,
     targetHeight: Int,
     targetWidth: Int
@@ -368,7 +420,7 @@ public class ZImageControlPipeline {
 
     private func encodeImageToLatents(
       cgImage: CGImage,
-      vae: AutoencoderKL,
+      vae: VAEImageEncoding,
       vaeConfig: ZImageVAEConfig,
       pixelH: Int,
       pixelW: Int,
@@ -441,7 +493,7 @@ public class ZImageControlPipeline {
       controlImage: CGImage?,
       inpaintImage: CGImage?,
       maskImage: CGImage?,
-      vae: AutoencoderKL,
+      vae: VAEImageEncoding,
       vaeConfig: ZImageVAEConfig,
       targetHeight: Int,
       targetWidth: Int,
@@ -533,7 +585,7 @@ public class ZImageControlPipeline {
 
     private func loadControlImage(
       cgImage: CGImage,
-      vae: AutoencoderKL,
+      vae: VAEImageEncoding,
       vaeConfig: ZImageVAEConfig,
       targetHeight: Int,
       targetWidth: Int
@@ -649,7 +701,9 @@ public class ZImageControlPipeline {
         && loadedWeightsVariant == requestedWeightsVariant
         && ZImageModelRegistry.areZImageVariants(loadedModelId ?? "", requestedModelId)
       if canPreserveSharedComponents {
-        logger.info("Switching Z-Image variant, preserving VAE and tokenizer")
+        logger.info("Switching Z-Image variant, preserving tokenizer")
+        self.vaeEncoder = nil
+        self.vaeDecoder = nil
         self.transformer = nil
         self.controlnet = nil
         self.modelConfigs = nil
@@ -663,7 +717,8 @@ public class ZImageControlPipeline {
         Memory.clearCache()
       } else {
         self.tokenizer = nil
-        self.vae = nil
+        self.vaeEncoder = nil
+        self.vaeDecoder = nil
         self.transformer = nil
         self.controlnet = nil
         self.modelConfigs = nil
@@ -717,16 +772,6 @@ public class ZImageControlPipeline {
         self.tokenizer = try loadTokenizer(snapshot: snapshot)
       } else {
         logger.info("Reusing cached tokenizer")
-      }
-
-      if self.vae == nil {
-        logger.info("Loading VAE...")
-        let vae = try loadVAE(snapshot: snapshot, config: modelConfigs.vae)
-        let vaeWeights = try weightsMapper.loadVAE()
-        ZImageWeightsMapping.applyVAE(weights: vaeWeights, to: vae, manifest: quantManifest, logger: logger)
-        self.vae = vae
-      } else {
-        logger.info("Reusing cached VAE")
       }
       logger.info("Loading transformer...")
       let transformer = try loadTransformer(snapshot: snapshot, config: modelConfigs.transformer)
@@ -786,8 +831,7 @@ public class ZImageControlPipeline {
     }
     guard let snapshot,
       let modelConfigs,
-      let tokenizer,
-      let vae
+      let tokenizer
     else {
       throw PipelineError.transformerNotLoaded
     }
@@ -898,6 +942,11 @@ public class ZImageControlPipeline {
       let maskCG: CGImage? = request.maskImageCG ?? (request.maskImage.flatMap { loadCGImage(from: $0) })
       let hasControlInputs = controlCG != nil || inpaintCG != nil || maskCG != nil
       if hasControlInputs {
+        let vaeEncoder = try prepareVAEEncoder(snapshot: snapshot, config: modelConfigs.vae)
+        defer {
+          unloadVAEEncoder()
+          Memory.clearCache()
+        }
         logger.info(
           "Building control context (control=\(controlCG != nil), inpaint=\(inpaintCG != nil), mask=\(maskCG != nil))..."
         )
@@ -913,7 +962,7 @@ public class ZImageControlPipeline {
           controlImage: controlCG,
           inpaintImage: inpaintCG,
           maskImage: maskCG,
-          vae: vae,
+          vae: vaeEncoder,
           vaeConfig: modelConfigs.vae,
           targetHeight: request.height,
           targetWidth: request.width,
@@ -922,18 +971,24 @@ public class ZImageControlPipeline {
         MLX.eval(result)
         logControlMemory("control-context.after-eval", enabled: logPhaseMemory)
         logger.info("Control context built, shape: \(result.shape)")
-        let materializedControlContext = result.asType(vae.dtype)
+        let materializedControlContext = result.asType(vaeEncoder.dtype)
         MLX.eval(materializedControlContext)
         controlContext = materializedControlContext
+        unloadVAEEncoder()
         Memory.clearCache()
         logControlMemory("control-context.after-clear-cache", enabled: logPhaseMemory)
       }
     #else
       if let controlImageURL = request.controlImage {
+        let vaeEncoder = try prepareVAEEncoder(snapshot: snapshot, config: modelConfigs.vae)
+        defer {
+          unloadVAEEncoder()
+          Memory.clearCache()
+        }
         logger.info("Loading control image from \(controlImageURL.path)...")
         let context = try loadControlImage(
           url: controlImageURL,
-          vae: vae,
+          vae: vaeEncoder,
           vaeConfig: modelConfigs.vae,
           targetHeight: request.height,
           targetWidth: request.width
@@ -941,6 +996,9 @@ public class ZImageControlPipeline {
         MLX.eval(context)
         logger.info("Control image encoded, shape: \(context.shape)")
         controlContext = context
+        unloadVAEEncoder()
+        Memory.clearCache()
+        logControlMemory("control-context.after-clear-cache", enabled: logPhaseMemory)
       }
     #endif
     let vaeDivisor = modelConfigs.vae.latentDivisor
@@ -1076,9 +1134,12 @@ public class ZImageControlPipeline {
         fractionCompleted: 1.0
       ))
     logger.info("Denoising complete, decoding latents...")
-    let decoded = PipelineUtilities.decodeLatents(latents, vae: vae, height: request.height, width: request.width)
+    let vaeDecoder = try prepareVAEDecoder(snapshot: snapshot, config: modelConfigs.vae)
+    let decoded = PipelineUtilities.decodeLatents(latents, vae: vaeDecoder, height: request.height, width: request.width)
     MLX.eval(decoded)
     logControlMemory("decode.after-eval", enabled: logPhaseMemory)
+    unloadVAEDecoder()
+    Memory.clearCache()
     return decoded
   }
 
