@@ -4,9 +4,6 @@ This is a lightweight, prioritized list of *potential* next steps for the projec
 
 ## Highest Priority
 
-0. **Land the control-context memory remediation plan**
-   - Follow [`control-context-memory-remediation.md`](control-context-memory-remediation.md)
-   - Prioritize instrumentation, VAE-attention diagnosis, and large-image peak reduction for `ZImageCLI control`
 1. **Reduce duplication across pipelines and transformer variants**
    - `ZImagePipeline` vs `ZImageControlPipeline`
    - `ZImageTransformer2DModel` vs `ZImageControlTransformer2DModel`
@@ -26,4 +23,5 @@ This is a lightweight, prioritized list of *potential* next steps for the projec
 ## Ongoing Maintenance
 
 - Keep CLI help text and docs in sync.
+- Use `--log-control-memory` and the `1536x2304` control reference run from [`control-context-memory-remediation.md`](control-context-memory-remediation.md) when touching the control/VAE memory path.
 - Prefer adding new docs under `docs/` and linking from `README.md` (avoid duplicated explanations).

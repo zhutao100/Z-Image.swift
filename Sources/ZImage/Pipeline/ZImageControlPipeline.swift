@@ -32,14 +32,9 @@ public typealias ControlProgressCallback = @Sendable (ControlProgress) -> Void
 
 public struct ZImageControlRuntimeOptions: Sendable {
   public var logPhaseMemory: Bool
-  public var disableControlVAEMidBlockAttention: Bool
 
-  public init(
-    logPhaseMemory: Bool = false,
-    disableControlVAEMidBlockAttention: Bool = false
-  ) {
+  public init(logPhaseMemory: Bool = false) {
     self.logPhaseMemory = logPhaseMemory
-    self.disableControlVAEMidBlockAttention = disableControlVAEMidBlockAttention
   }
 }
 
@@ -377,8 +372,7 @@ public class ZImageControlPipeline {
       vaeConfig: ZImageVAEConfig,
       pixelH: Int,
       pixelW: Int,
-      logPhaseMemory: Bool,
-      disableMidBlockAttention: Bool
+      logPhaseMemory: Bool
     ) throws -> MLXArray {
       let vaeDType = vae.dtype
       let imageArray = try QwenImageIO.resizedPixelArray(
@@ -390,7 +384,7 @@ public class ZImageControlPipeline {
       )
       let normalized = QwenImageIO.normalizeForEncoder(imageArray)
       logControlMemory("control-vae.encode.control.before", enabled: logPhaseMemory)
-      let encodedLatents = vae.encode(normalized, disableMidBlockAttention: disableMidBlockAttention)
+      let encodedLatents = vae.encode(normalized)
       let latentChannels = vaeConfig.latentChannels
       let latents = encodedLatents[0..., 0..<latentChannels, 0..., 0...]
       let shiftFactor = MLXArray(vaeConfig.shiftFactor).asType(latents.dtype)
@@ -451,8 +445,7 @@ public class ZImageControlPipeline {
       vaeConfig: ZImageVAEConfig,
       targetHeight: Int,
       targetWidth: Int,
-      logPhaseMemory: Bool,
-      disableControlVAEMidBlockAttention: Bool
+      logPhaseMemory: Bool
     ) throws -> MLXArray {
       let vaeDivisor = vaeConfig.latentDivisor
       let latentH = max(1, targetHeight / vaeDivisor)
@@ -471,8 +464,7 @@ public class ZImageControlPipeline {
             vaeConfig: vaeConfig,
             pixelH: pixelH,
             pixelW: pixelW,
-            logPhaseMemory: logPhaseMemory,
-            disableMidBlockAttention: disableControlVAEMidBlockAttention
+            logPhaseMemory: logPhaseMemory
           )
         } else {
           MLX.zeros([1, vaeConfig.latentChannels, latentH, latentW], dtype: vaeDType)
@@ -554,8 +546,7 @@ public class ZImageControlPipeline {
         vaeConfig: vaeConfig,
         targetHeight: targetHeight,
         targetWidth: targetWidth,
-        logPhaseMemory: false,
-        disableControlVAEMidBlockAttention: false
+        logPhaseMemory: false
       )
     }
   #endif
@@ -646,7 +637,6 @@ public class ZImageControlPipeline {
   // swiftlint:disable:next cyclomatic_complexity
   private func generateCore(_ request: ZImageControlGenerationRequest) async throws -> MLXArray {
     let logPhaseMemory = request.runtimeOptions.logPhaseMemory
-    let disableControlVAEMidBlockAttention = request.runtimeOptions.disableControlVAEMidBlockAttention
     let requestedModelId = request.model ?? ZImageRepository.id
     let requestedWeightsVariant = ZImageFiles.normalizedWeightsVariant(request.weightsVariant)
     let requestedControlnetId = request.controlnetWeights
@@ -911,9 +901,6 @@ public class ZImageControlPipeline {
         logger.info(
           "Building control context (control=\(controlCG != nil), inpaint=\(inpaintCG != nil), mask=\(maskCG != nil))..."
         )
-        if disableControlVAEMidBlockAttention, controlCG != nil {
-          logger.warning("Diagnostic mode: disabling VAE mid-block attention for control-image encoding")
-        }
         let needsBaselineReduction = transformer != nil || controlnet != nil || hasLoRALoaded
         if needsBaselineReduction {
           unloadTransformer()
@@ -930,8 +917,7 @@ public class ZImageControlPipeline {
           vaeConfig: modelConfigs.vae,
           targetHeight: request.height,
           targetWidth: request.width,
-          logPhaseMemory: logPhaseMemory,
-          disableControlVAEMidBlockAttention: disableControlVAEMidBlockAttention
+          logPhaseMemory: logPhaseMemory
         )
         MLX.eval(result)
         logControlMemory("control-context.after-eval", enabled: logPhaseMemory)

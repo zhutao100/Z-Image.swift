@@ -106,6 +106,17 @@ Key code:
 6. Decode latents via VAE
 7. Write PNG (`ImageIO`)
 
+## Control-Path Memory Policy
+
+`ZImageControlPipeline` uses a narrower residency window than the base text-to-image path when it constructs control context for large images:
+
+1. Prompt embeddings are computed and cached.
+2. The transformer, ControlNet, and active LoRA state are unloaded before `buildControlContext(...)`.
+3. Control and inpaint inputs are VAE-encoded while the baseline residency is low.
+4. The transformer, ControlNet, and LoRA state are reloaded before denoising starts.
+
+The VAE mid-block self-attention in `Sources/ZImage/Model/VAE/AutoencoderKL.swift` now chunks the query dimension internally to reduce large-image MLX cache pressure without changing weights. The supported runtime probe for this path is `ZImageCLI control --log-control-memory`.
+
 ## Tests
 
 - Unit tests: `Tests/ZImageTests/` (fast, no model downloads)

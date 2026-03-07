@@ -2,6 +2,8 @@
 
 This plan translates the control-path memory investigation into a repo-aligned implementation sequence for the Swift codebase.
 
+Execution status: completed on March 7, 2026. The phases below remain as the implementation record, and this document now also records which interventions were retained versus intentionally skipped.
+
 Scope:
 
 - `ZImageCLI control`
@@ -9,6 +11,29 @@ Scope:
 - `Sources/ZImage/Model/VAE/AutoencoderKL.swift`
 - targeted unit-test coverage under `Tests/ZImageTests/`
 - manual validation against the local Diffusers reference when needed
+
+## Execution Status
+
+Retained changes:
+
+- Phase 0 landed and remains in the tree as `--log-control-memory`.
+- Phase 2 landed and remains in the tree: the control pipeline now unloads transformer, ControlNet, and active LoRA state before `buildControlContext(...)`, then reloads them before denoising.
+- Phase 3 landed and remains in the tree: VAE self-attention now chunks the query dimension internally.
+
+Diagnostic-only work that was removed after validation:
+
+- Phase 1 temporarily added `--debug-disable-control-vae-attention` to test whether VAE mid-block attention alone explained the peak. It did not materially lower the measured peak, so the flag was removed during final cleanup rather than kept as permanent CLI surface area.
+
+Skipped by the built-in gates:
+
+- Phase 4 tiled VAE encode
+- Phase 5 VAE lifecycle split
+
+Measured `1536x2304` reference outcome (`--steps 1`, `--log-control-memory`):
+
+- Phase 0 baseline: `control-context.before-build` was about `35.41 GiB` resident and `control-context.after-eval` reached an MLX peak of about `43.82 GiB`.
+- Final retained policy: `control-context.after-baseline-reduction` is about `384.23 MiB` resident, `control-context.after-eval` stays near `478.62 MiB` resident with an MLX peak of about `37.17 GiB`, and `decode.after-eval` finishes with an overall peak of about `39.04 GiB`.
+- Phase 3 kept the same peak as Phase 2 on the reference run, but lowered post-build MLX cache from about `33.82 GiB` to `28.07 GiB`, so it was retained while the heavier later phases were skipped.
 
 ## Current Repo State
 
@@ -206,6 +231,10 @@ Implementation guidance:
 Expected user-visible shape:
 
 - `ZImageCLI control --debug-disable-control-vae-attention`
+
+Execution note:
+
+- This diagnostic flag landed temporarily for measurement and was removed in the final runtime policy once the measurements showed that disabling VAE mid-block attention did not materially lower the peak.
 
 ### Validation
 

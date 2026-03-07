@@ -484,7 +484,6 @@ enum ZImageCLI {
     var maxSequenceLength = 512
     var noProgress = false
     var logControlMemory = false
-    var disableControlVAEMidBlockAttention = false
 
     var iterator = args.makeIterator()
     while let arg = iterator.next() {
@@ -527,8 +526,6 @@ enum ZImageCLI {
         maxSequenceLength = intValue(for: arg, iterator: &iterator, minimum: 64, fallback: 512)
       case "--log-control-memory":
         logControlMemory = true
-      case "--debug-disable-control-vae-attention":
-        disableControlVAEMidBlockAttention = true
       case "--no-progress":
         noProgress = true
       case "--help", "-h":
@@ -626,10 +623,7 @@ enum ZImageCLI {
       controlnetWeightsFile: controlnetWeightsFile,
       maxSequenceLength: maxSequenceLength,
       progressCallback: progressCallback,
-      runtimeOptions: .init(
-        logPhaseMemory: logControlMemory,
-        disableControlVAEMidBlockAttention: disableControlVAEMidBlockAttention
-      )
+      runtimeOptions: .init(logPhaseMemory: logControlMemory)
     )
 
     let pipeline = ZImageControlPipeline(logger: logger)
@@ -674,7 +668,6 @@ enum ZImageCLI {
         --cache-limit             GPU memory cache limit in MB (default: unlimited)
         --max-sequence-length     Maximum sequence length for text encoding (default: 512)
         --log-control-memory      Emit resident and MLX memory markers for control-path phases
-        --debug-disable-control-vae-attention  Diagnostic: skip VAE mid-block attention for control-image encoding
         --no-progress             Disable progress output
         --help, -h                Show help
 

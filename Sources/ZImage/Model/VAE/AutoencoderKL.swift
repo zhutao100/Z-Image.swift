@@ -333,9 +333,9 @@ private final class VAEMidBlock: Module {
     super.init()
   }
 
-  func callAsFunction(_ x: MLXArray, disableAttention: Bool = false) -> MLXArray {
+  func callAsFunction(_ x: MLXArray) -> MLXArray {
     var hidden = resnets[0](x)
-    if !disableAttention, !attentions.isEmpty {
+    if !attentions.isEmpty {
       hidden = attentions[0](hidden)
     }
     hidden = resnets[1](hidden)
@@ -464,12 +464,12 @@ private final class VAEEncoder: Module {
     super.init()
   }
 
-  func callAsFunction(_ x: MLXArray, disableMidBlockAttention: Bool = false) -> MLXArray {
+  func callAsFunction(_ x: MLXArray) -> MLXArray {
     var hidden = convIn(x)
     for block in downBlocks {
       hidden = block(hidden)
     }
-    hidden = midBlock(hidden, disableAttention: disableMidBlockAttention)
+    hidden = midBlock(hidden)
     hidden = silu(convNormOut(hidden))
     hidden = convOut(hidden)
     return hidden
@@ -505,12 +505,8 @@ public final class AutoencoderKL: Module {
   }
 
   public func encode(_ images: MLXArray) -> MLXArray {
-    encode(images, disableMidBlockAttention: false)
-  }
-
-  func encode(_ images: MLXArray, disableMidBlockAttention: Bool) -> MLXArray {
     var hidden = images.transposed(0, 2, 3, 1)
-    hidden = encoder(hidden, disableMidBlockAttention: disableMidBlockAttention)
+    hidden = encoder(hidden)
     hidden = hidden.transposed(0, 3, 1, 2)
     return hidden
   }
