@@ -70,6 +70,25 @@ public enum PipelineUtilities {
     return Float(imageSeqLen) * m + b
   }
 
+  static func runtimeDType(for module: Module) -> DType? {
+    for (_, parameter) in module.parameters().flattened() {
+      switch parameter.dtype {
+      case .float16, .bfloat16, .float32, .float64:
+        return parameter.dtype
+      default:
+        continue
+      }
+    }
+    return nil
+  }
+
+  static func castModelInputToRuntimeDTypeIfNeeded(_ input: MLXArray, module: Module) -> MLXArray {
+    guard let dtype = runtimeDType(for: module), input.dtype != dtype else {
+      return input
+    }
+    return input.asType(dtype)
+  }
+
   @available(*, deprecated, message: "Use ZImagePipeline.loadModel / PipelineSnapshot.prepare instead.")
   public static func prepareSnapshot(
     model: String?,

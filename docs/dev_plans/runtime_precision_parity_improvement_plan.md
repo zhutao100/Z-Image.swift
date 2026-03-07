@@ -70,7 +70,7 @@ Acceptance bar:
 
 ## Phase 1: Denoiser Ingress Dtype Normalization
 
-Status: pending
+Status: completed on March 7, 2026
 
 Objective:
 
@@ -177,6 +177,31 @@ This section is updated as phases land.
   - Swift vs Diffusers MAE: `33.3260`
   - Swift vs Diffusers max abs pixel delta: `238`
   - Swift vs Diffusers PSNR: `15.2456 dB`
-- Phase 1: pending
+- Phase 1: completed on March 7, 2026.
+  - Scope landed:
+    - explicit runtime-dtype casts at transformer ingress in the base pipeline
+    - explicit runtime-dtype casts at controlnet and transformer ingress in the control pipeline
+    - shared module-runtime-dtype helper coverage in `ZImageTests`
+  - Phase 1 base metrics:
+    - Swift peak RSS: `38.16 GiB` (`38161776640` bytes)
+    - Swift peak memory footprint: `38.94 GiB` (`38943542040` bytes)
+    - Swift vs Diffusers MAE: `28.7489`
+    - Swift vs Diffusers max abs pixel delta: `255`
+    - Swift vs Diffusers PSNR: `14.6354 dB`
+    - Swift phase 1 vs phase 0 MAE: `2.2592`
+    - Swift phase 1 vs phase 0 max abs pixel delta: `197`
+    - Swift phase 1 vs phase 0 PSNR: `31.6204 dB`
+  - Phase 1 control metrics:
+    - Swift peak RSS: `42.83 GiB` (`42829496320` bytes)
+    - Swift peak memory footprint: `51.40 GiB` (`51400154488` bytes)
+    - Swift vs Diffusers MAE: `33.3900`
+    - Swift vs Diffusers max abs pixel delta: `236`
+    - Swift vs Diffusers PSNR: `15.2305 dB`
+    - Swift phase 1 vs phase 0 MAE: `1.2675`
+    - Swift phase 1 vs phase 0 max abs pixel delta: `46`
+    - Swift phase 1 vs phase 0 PSNR: `42.2552 dB`
+  - Assessment:
+    - parity remained effectively flat on the fixed probes
+    - peak memory footprint improved modestly in both probes, while peak RSS stayed effectively flat
 - Phase 2: pending
 - Phase 3: pending

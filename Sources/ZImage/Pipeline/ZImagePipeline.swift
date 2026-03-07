@@ -825,7 +825,8 @@ public final class ZImagePipeline {
           embeds = MLX.concatenated([promptEmbeds, ne], axis: 0)
         }
 
-        let noisePred = transformer.forward(latents: modelLatents, timestep: timestepArray, promptEmbeds: embeds)
+        let typedModelLatents = PipelineUtilities.castModelInputToRuntimeDTypeIfNeeded(modelLatents, module: transformer)
+        let noisePred = transformer.forward(latents: typedModelLatents, timestep: timestepArray, promptEmbeds: embeds)
         let guidedNoise: MLXArray
         if doCFG, negativeEmbeds != nil {
           let batch = latents.dim(0)

@@ -1014,20 +1014,28 @@ public class ZImageControlPipeline {
           modelLatents = MLX.concatenated([latents, latents], axis: 0)
           embeds = MLX.concatenated([promptEmbeds, ne], axis: 0)
         }
-        let controlnetBlockSamples: ZImageControlBlockSamples? =
-          if let controlContext, let controlnet {
-            controlnet.forward(
-              latents: modelLatents,
-              timestep: timestepArray,
-              promptEmbeds: embeds,
-              controlContext: controlContext,
-              conditioningScale: request.controlContextScale
-            )
-          } else {
-            nil
-          }
+        let controlnetBlockSamples: ZImageControlBlockSamples?
+        if let controlContext, let controlnet {
+          let typedControlLatents = PipelineUtilities.castModelInputToRuntimeDTypeIfNeeded(
+            modelLatents,
+            module: controlnet
+          )
+          controlnetBlockSamples = controlnet.forward(
+            latents: typedControlLatents,
+            timestep: timestepArray,
+            promptEmbeds: embeds,
+            controlContext: controlContext,
+            conditioningScale: request.controlContextScale
+          )
+        } else {
+          controlnetBlockSamples = nil
+        }
+        let typedTransformerLatents = PipelineUtilities.castModelInputToRuntimeDTypeIfNeeded(
+          modelLatents,
+          module: transformer
+        )
         let noisePred = transformer.forward(
-          latents: modelLatents,
+          latents: typedTransformerLatents,
           timestep: timestepArray,
           promptEmbeds: embeds,
           controlnetBlockSamples: controlnetBlockSamples
