@@ -1,12 +1,18 @@
 # Control Pipeline Memory Analysis And Phased Plan
 
-Updated for `main` at commit `a2f6a5a` on `2026-03-07 10:08:21 PST`.
+This note records the original diagnosis for the resident-memory surge during `ZImageCLI control` at `1536x2304` and the phased remediation plan that followed.
 
-This note documents the observed resident-memory surge during `ZImageCLI control` at `1536x2304`, explains the likely root causes in the current Swift/MLX implementation, and defines the implementation phases for the requested fixes.
+Status on `2026-03-07`:
+
+- Phase 1 implemented: text encoder is released before control-context build.
+- Phase 2 implemented: control context is built in the VAE dtype.
+- Phase 3 implemented: ControlNet is a separate module that shares base transformer modules.
+
+Unless stated otherwise, the root-cause descriptions below refer to the pre-fix control-pipeline architecture that motivated the phased changes.
 
 ## Observed Behavior
 
-Reported run:
+Reported run before the fixes:
 
 - Model + VAE + control transformer loaded: a little above `~20 GB`
 - During `Loading text encoder...`: gradually climbs to `~30 GB`
@@ -92,7 +98,7 @@ The control pipeline currently keeps the text-encoding phase more memory-residen
 
 ### 5) The Swift control path keeps a higher baseline than Diffusers
 
-The current Swift implementation builds a full control transformer and applies base transformer weights into it.
+Before Phase 3, the Swift implementation built a full control transformer and applied base transformer weights into it.
 
 Relevant code:
 
@@ -111,6 +117,12 @@ Implication:
 - The Swift control path starts from a higher resident-memory floor before denoising begins.
 
 ## Phased Plan
+
+Implementation status:
+
+- Phase 1 completed
+- Phase 2 completed
+- Phase 3 completed
 
 ### Phase 1: Release text-encoder memory earlier
 

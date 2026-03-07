@@ -3,14 +3,6 @@ import MLX
 import MLXNN
 
 public enum ZImageControlWeightsMapping {
-  private static func transformerMapping(_ weights: [String: MLXArray]) -> [String: MLXArray] {
-    var mapped: [String: MLXArray] = [:]
-    for (k, v) in weights {
-      mapped["transformer.\(k)"] = v
-    }
-    return mapped
-  }
-
   private static func canonicalizeControlnetQuantizedParameterKey(_ key: String) -> String {
     var paramKey = key
     paramKey = paramKey.replacingOccurrences(of: "feed_forward", with: "feedForward")
@@ -30,35 +22,9 @@ public enum ZImageControlWeightsMapping {
     return paramKey
   }
 
-  public static func applyControlTransformer(
-    weights: [String: MLXArray],
-    to transformer: ZImageControlTransformer2DModel,
-    manifest: ZImageQuantizationManifest?,
-    logger: Logger
-  ) {
-    if let manifest {
-      let availableKeys = Set(weights.keys)
-      ZImageQuantizer.applyQuantization(
-        to: transformer,
-        manifest: manifest,
-        availableKeys: availableKeys,
-        tensorNameTransform: ZImageQuantizer.transformerTensorName
-      )
-    }
-    let groupSize = manifest?.groupSize ?? 32
-    let bits = manifest?.bits ?? 8
-    let mapped = transformerMapping(weights)
-    ZImageModuleWeightsApplier.applyToModule(transformer, weights: mapped, prefix: "transformer", logger: logger)
-    transformer.loadCapEmbedderWeights(from: weights)
-    transformer.loadXEmbedderWeights(from: weights, groupSize: groupSize, bits: bits)
-    transformer.loadFinalLayerWeights(from: weights, groupSize: groupSize, bits: bits)
-    transformer.setPadTokens(xPad: weights["x_pad_token"], capPad: weights["cap_pad_token"])
-    logger.info("Applied base transformer weights to control transformer")
-  }
-
   public static func applyControlnetWeights(
     weights: [String: MLXArray],
-    to transformer: ZImageControlTransformer2DModel,
+    to controlnet: ZImageControlNetModel,
     manifest: ZImageQuantizationManifest?,
     logger: Logger
   ) {
@@ -66,14 +32,14 @@ public enum ZImageControlWeightsMapping {
     if let manifest {
       let availableKeys = Set(weights.keys)
       ZImageQuantizer.applyControlnetQuantization(
-        to: transformer,
+        to: controlnet,
         manifest: manifest,
         availableKeys: availableKeys
       )
       logger.info("Applied quantization to controlnet (\(manifest.bits)-bit, group_size=\(manifest.groupSize))")
     }
-    transformer.loadControlXEmbedderWeights(from: weights)
-    for (idx, block) in transformer.controlNoiseRefiner.enumerated() {
+    controlnet.loadControlXEmbedderWeights(from: weights)
+    for (idx, block) in controlnet.controlNoiseRefiner.enumerated() {
       if isQuantized {
         let prefix = "controlNoiseRefiner.\(idx)"
         ZImageModuleWeightsApplier.applyToModule(
@@ -89,7 +55,7 @@ public enum ZImageControlWeightsMapping {
         applyControlTransformerBlockWeights(weights: weights, prefix: prefix, to: block)
       }
     }
-    for (idx, block) in transformer.controlLayers.enumerated() {
+    for (idx, block) in controlnet.controlLayers.enumerated() {
       if isQuantized {
         let prefix = "controlLayers.\(idx)"
         ZImageModuleWeightsApplier.applyToModule(
@@ -106,124 +72,6 @@ public enum ZImageControlWeightsMapping {
       }
     }
     logger.info("Applied controlnet weights")
-  }
-
-  private static func applyTransformerBlockWeights(
-    weights: [String: MLXArray],
-    prefix: String,
-    to block: ZImageTransformerBlock
-  ) {
-    if let w = weights["\(prefix).attention.to_q.weight"] {
-      block.attention.toQ.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention.to_k.weight"] {
-      block.attention.toK.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention.to_v.weight"] {
-      block.attention.toV.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention.to_out.0.weight"] {
-      block.attention.toOut[0].weight._updateInternal(w)
-    }
-    if let b = weights["\(prefix).attention.to_out.0.bias"] {
-      block.attention.toOut[0].bias?._updateInternal(b)
-    }
-    if let w = weights["\(prefix).attention.norm_q.weight"] {
-      block.attention.normQ?.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention.norm_k.weight"] {
-      block.attention.normK?.weight._updateInternal(w)
-    }
-    if let adaLN = block.adaLN, adaLN.count > 0 {
-      if let w = weights["\(prefix).adaLN_modulation.0.weight"] {
-        adaLN[0].weight._updateInternal(w)
-      }
-      if let b = weights["\(prefix).adaLN_modulation.0.bias"] {
-        adaLN[0].bias?._updateInternal(b)
-      }
-    }
-    if let w = weights["\(prefix).attention_norm1.weight"] {
-      block.attentionNorm1.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).ffn_norm1.weight"] {
-      block.ffnNorm1.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention_norm2.weight"] {
-      block.attentionNorm2.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).ffn_norm2.weight"] {
-      block.ffnNorm2.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).feed_forward.w1.weight"] {
-      block.feedForward.w1.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).feed_forward.w2.weight"] {
-      block.feedForward.w2.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).feed_forward.w3.weight"] {
-      block.feedForward.w3.weight._updateInternal(w)
-    }
-  }
-
-  private static func applyBaseTransformerBlockWeights(
-    weights: [String: MLXArray],
-    prefix: String,
-    to block: BaseZImageTransformerBlock
-  ) {
-    if let w = weights["\(prefix).attention.to_q.weight"] {
-      block.attention.toQ.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention.to_k.weight"] {
-      block.attention.toK.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention.to_v.weight"] {
-      block.attention.toV.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention.to_out.0.weight"] {
-      block.attention.toOut[0].weight._updateInternal(w)
-    }
-    if let b = weights["\(prefix).attention.to_out.0.bias"] {
-      block.attention.toOut[0].bias?._updateInternal(b)
-    }
-    if let w = weights["\(prefix).attention.norm_q.weight"] {
-      block.attention.normQ?.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention.norm_k.weight"] {
-      block.attention.normK?.weight._updateInternal(w)
-    }
-    if let adaLN = block.adaLN, adaLN.count > 0 {
-      if let w = weights["\(prefix).adaLN_modulation.0.weight"] {
-        adaLN[0].weight._updateInternal(w)
-      } else if let w = weights["\(prefix).adaLN_modulation.1.weight"] {
-        adaLN[0].weight._updateInternal(w)
-      }
-      if let b = weights["\(prefix).adaLN_modulation.0.bias"] {
-        adaLN[0].bias?._updateInternal(b)
-      } else if let b = weights["\(prefix).adaLN_modulation.1.bias"] {
-        adaLN[0].bias?._updateInternal(b)
-      }
-    }
-    if let w = weights["\(prefix).attention_norm1.weight"] {
-      block.attentionNorm1.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).ffn_norm1.weight"] {
-      block.ffnNorm1.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).attention_norm2.weight"] {
-      block.attentionNorm2.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).ffn_norm2.weight"] {
-      block.ffnNorm2.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).feed_forward.w1.weight"] {
-      block.feedForward.w1.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).feed_forward.w2.weight"] {
-      block.feedForward.w2.weight._updateInternal(w)
-    }
-    if let w = weights["\(prefix).feed_forward.w3.weight"] {
-      block.feedForward.w3.weight._updateInternal(w)
-    }
   }
 
   // swiftlint:disable:next cyclomatic_complexity

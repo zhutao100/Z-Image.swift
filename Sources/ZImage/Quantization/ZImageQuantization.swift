@@ -432,25 +432,6 @@ public struct ZImageQuantizer {
       return
     }
 
-    if let controlTransformer = model as? ZImageControlTransformer2DModel {
-      for (i, block) in controlTransformer.layers.enumerated() {
-        quantizeBlock(
-          block, prefix: "layers.\(i)", availableKeys: availableKeys,
-          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
-      }
-      for (i, block) in controlTransformer.noiseRefiner.enumerated() {
-        quantizeBlock(
-          block, prefix: "noise_refiner.\(i)", availableKeys: availableKeys,
-          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
-      }
-      for (i, block) in controlTransformer.contextRefiner.enumerated() {
-        quantizeBlock(
-          block, prefix: "context_refiner.\(i)", availableKeys: availableKeys,
-          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
-      }
-      return
-    }
-
     MLXNN.quantize(model: model) { path, _ in
       let tensorName = tensorNameTransform(path)
       let scalesKey = "\(tensorName).scales"
@@ -728,18 +709,18 @@ public struct ZImageQuantizer {
     return result
   }
   public static func applyControlnetQuantization(
-    to transformer: ZImageControlTransformer2DModel,
+    to controlnet: ZImageControlNetModel,
     manifest: ZImageQuantizationManifest,
     availableKeys: Set<String>
   ) {
     let defaultSpec = (manifest.groupSize, manifest.bits, manifest.mode)
-    for (i, block) in transformer.controlNoiseRefiner.enumerated() {
+    for (i, block) in controlnet.controlNoiseRefiner.enumerated() {
       let prefix = "control_noise_refiner.\(i)"
       quantizeBlock(
         block, prefix: prefix, availableKeys: availableKeys,
         defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: controlnetTensorName)
     }
-    for (i, block) in transformer.controlLayers.enumerated() {
+    for (i, block) in controlnet.controlLayers.enumerated() {
       let prefix = "control_layers.\(i)"
       quantizeControlBlock(
         block, prefix: prefix, availableKeys: availableKeys,

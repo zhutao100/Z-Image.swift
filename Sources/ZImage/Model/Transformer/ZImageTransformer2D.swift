@@ -2,6 +2,8 @@ import Foundation
 import MLX
 import MLXNN
 
+public typealias ZImageControlBlockSamples = [Int: MLXArray]
+
 public final class ZImageTransformer2DModel: Module {
   public let configuration: ZImageTransformerConfig
   @ModuleInfo(key: "t_embedder") var tEmbedder: ZImageTimestepEmbedder
@@ -156,6 +158,14 @@ public final class ZImageTransformer2DModel: Module {
     cacheKey = nil
   }
 
+  var sharedXPadToken: MLXArray? {
+    xPadToken
+  }
+
+  var sharedCapPadToken: MLXArray? {
+    capPadToken
+  }
+
   private func getOrBuildCache(
     batch: Int,
     height: Int,
@@ -197,7 +207,8 @@ public final class ZImageTransformer2DModel: Module {
   public func forward(
     latents: MLXArray,
     timestep: MLXArray,
-    promptEmbeds: MLXArray
+    promptEmbeds: MLXArray,
+    controlnetBlockSamples: ZImageControlBlockSamples? = nil
   ) -> MLXArray {
     let hasFrameDim = latents.ndim == 5
     let batch = latents.dim(0)
@@ -289,8 +300,11 @@ public final class ZImageTransformer2DModel: Module {
 
     var unified = MLX.concatenated([noiseStream, capStream], axis: 1)
 
-    for block in layers {
+    for (layerIdx, block) in layers.enumerated() {
       unified = block(unified, attnMask: nil, freqsCis: cached.unifiedFreqsCis, adalnInput: tEmb)
+      if let controlHint = controlnetBlockSamples?[layerIdx] {
+        unified = unified + controlHint
+      }
     }
 
     let imageOut = unified[0..., 0..<cached.imageTokens, 0...]

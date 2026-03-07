@@ -173,7 +173,8 @@ public class ZImageControlPipeline {
   private var logger: Logger
   private var tokenizer: QwenTokenizer?
   private var vae: AutoencoderKL?
-  private var transformer: ZImageControlTransformer2DModel?
+  private var transformer: ZImageTransformer2DModel?
+  private var controlnet: ZImageControlNetModel?
   private var modelConfigs: ZImageModelConfigs?
   private var quantManifest: ZImageQuantizationManifest?
   private var snapshot: URL?
@@ -198,99 +199,6 @@ public class ZImageControlPipeline {
     self.logger = logger
   }
 
-  private func clearControlnetWeights() {
-    guard let transformer else { return }
-    logger.info("Clearing controlnet weights to free GPU memory...")
-    for (_, linear) in transformer.controlAllXEmbedder {
-      let zeroWeight = MLXArray.zeros(like: linear.weight)
-      linear.weight._updateInternal(zeroWeight)
-      if let bias = linear.bias {
-        let zeroBias = MLXArray.zeros(like: bias)
-        linear.bias?._updateInternal(zeroBias)
-      }
-    }
-    for block in transformer.controlNoiseRefiner {
-      zeroOutControlTransformerBlock(block)
-    }
-    for block in transformer.controlLayers {
-      zeroOutControlTransformerBlock(block)
-    }
-    Memory.clearCache()
-    logger.info("Controlnet weights cleared")
-  }
-
-  private func zeroOutTransformerBlock(_ block: ZImageTransformerBlock) {
-    block.attention.toQ.weight._updateInternal(MLXArray.zeros(like: block.attention.toQ.weight))
-    block.attention.toK.weight._updateInternal(MLXArray.zeros(like: block.attention.toK.weight))
-    block.attention.toV.weight._updateInternal(MLXArray.zeros(like: block.attention.toV.weight))
-    if block.attention.toOut.count > 0 {
-      block.attention.toOut[0].weight._updateInternal(MLXArray.zeros(like: block.attention.toOut[0].weight))
-      if let bias = block.attention.toOut[0].bias {
-        block.attention.toOut[0].bias?._updateInternal(MLXArray.zeros(like: bias))
-      }
-    }
-    if let normQ = block.attention.normQ {
-      normQ.weight._updateInternal(MLXArray.zeros(like: normQ.weight))
-    }
-    if let normK = block.attention.normK {
-      normK.weight._updateInternal(MLXArray.zeros(like: normK.weight))
-    }
-    if let adaLN = block.adaLN, adaLN.count > 0 {
-      adaLN[0].weight._updateInternal(MLXArray.zeros(like: adaLN[0].weight))
-      if let bias = adaLN[0].bias {
-        adaLN[0].bias?._updateInternal(MLXArray.zeros(like: bias))
-      }
-    }
-    block.attentionNorm1.weight._updateInternal(MLXArray.zeros(like: block.attentionNorm1.weight))
-    block.ffnNorm1.weight._updateInternal(MLXArray.zeros(like: block.ffnNorm1.weight))
-    block.attentionNorm2.weight._updateInternal(MLXArray.zeros(like: block.attentionNorm2.weight))
-    block.ffnNorm2.weight._updateInternal(MLXArray.zeros(like: block.ffnNorm2.weight))
-    block.feedForward.w1.weight._updateInternal(MLXArray.zeros(like: block.feedForward.w1.weight))
-    block.feedForward.w2.weight._updateInternal(MLXArray.zeros(like: block.feedForward.w2.weight))
-    block.feedForward.w3.weight._updateInternal(MLXArray.zeros(like: block.feedForward.w3.weight))
-  }
-
-  private func zeroOutControlTransformerBlock(_ block: ZImageControlTransformerBlock) {
-    block.attention.toQ.weight._updateInternal(MLXArray.zeros(like: block.attention.toQ.weight))
-    block.attention.toK.weight._updateInternal(MLXArray.zeros(like: block.attention.toK.weight))
-    block.attention.toV.weight._updateInternal(MLXArray.zeros(like: block.attention.toV.weight))
-    if block.attention.toOut.count > 0 {
-      block.attention.toOut[0].weight._updateInternal(MLXArray.zeros(like: block.attention.toOut[0].weight))
-      if let bias = block.attention.toOut[0].bias {
-        block.attention.toOut[0].bias?._updateInternal(MLXArray.zeros(like: bias))
-      }
-    }
-    if let normQ = block.attention.normQ {
-      normQ.weight._updateInternal(MLXArray.zeros(like: normQ.weight))
-    }
-    if let normK = block.attention.normK {
-      normK.weight._updateInternal(MLXArray.zeros(like: normK.weight))
-    }
-    if let adaLN = block.adaLN, adaLN.count > 0 {
-      adaLN[0].weight._updateInternal(MLXArray.zeros(like: adaLN[0].weight))
-      if let bias = adaLN[0].bias {
-        adaLN[0].bias?._updateInternal(MLXArray.zeros(like: bias))
-      }
-    }
-    block.attentionNorm1.weight._updateInternal(MLXArray.zeros(like: block.attentionNorm1.weight))
-    block.ffnNorm1.weight._updateInternal(MLXArray.zeros(like: block.ffnNorm1.weight))
-    block.attentionNorm2.weight._updateInternal(MLXArray.zeros(like: block.attentionNorm2.weight))
-    block.ffnNorm2.weight._updateInternal(MLXArray.zeros(like: block.ffnNorm2.weight))
-    block.feedForward.w1.weight._updateInternal(MLXArray.zeros(like: block.feedForward.w1.weight))
-    block.feedForward.w2.weight._updateInternal(MLXArray.zeros(like: block.feedForward.w2.weight))
-    block.feedForward.w3.weight._updateInternal(MLXArray.zeros(like: block.feedForward.w3.weight))
-    if let beforeProj = block.beforeProj {
-      beforeProj.weight._updateInternal(MLXArray.zeros(like: beforeProj.weight))
-      if let bias = beforeProj.bias {
-        beforeProj.bias?._updateInternal(MLXArray.zeros(like: bias))
-      }
-    }
-    block.afterProj.weight._updateInternal(MLXArray.zeros(like: block.afterProj.weight))
-    if let bias = block.afterProj.bias {
-      block.afterProj.bias?._updateInternal(MLXArray.zeros(like: bias))
-    }
-  }
-
   private func loadTokenizer(snapshot: URL) throws -> QwenTokenizer {
     let tokDir = snapshot.appending(path: "tokenizer")
     return try QwenTokenizer.load(from: tokDir)
@@ -313,10 +221,12 @@ public class ZImageControlPipeline {
     )
   }
 
-  private func loadControlTransformer(snapshot _: URL, config: ZImageTransformerConfig) throws
-    -> ZImageControlTransformer2DModel
-  {
-    let controlConfig = ZImageControlTransformerConfig(
+  private func loadTransformer(snapshot _: URL, config: ZImageTransformerConfig) throws -> ZImageTransformer2DModel {
+    ZImageTransformer2DModel(configuration: config)
+  }
+
+  private func makeControlnetConfig(from config: ZImageTransformerConfig) -> ZImageControlNetConfig {
+    ZImageControlNetConfig(
       inChannels: config.inChannels,
       dim: config.dim,
       nLayers: config.nLayers,
@@ -331,7 +241,47 @@ public class ZImageControlPipeline {
       axesDims: config.axesDims,
       axesLens: config.axesLens
     )
-    return ZImageControlTransformer2DModel(configuration: controlConfig)
+  }
+
+  private func loadControlnet(
+    transformer: ZImageTransformer2DModel,
+    config: ZImageTransformerConfig
+  ) -> ZImageControlNetModel {
+    ZImageControlNetModel(configuration: makeControlnetConfig(from: config), sharedTransformer: transformer)
+  }
+
+  private func unloadControlnet() {
+    guard controlnet != nil else {
+      loadedControlnetWeightsId = nil
+      return
+    }
+    controlnet = nil
+    loadedControlnetWeightsId = nil
+    Memory.clearCache()
+    logger.info("Controlnet unloaded for memory optimization")
+  }
+
+  private func loadAppliedControlnet(
+    transformer: ZImageTransformer2DModel,
+    transformerConfig: ZImageTransformerConfig,
+    controlnetSpec: String,
+    preferredFile: String?,
+    progressCallback: ControlProgressCallback?
+  ) async throws -> ZImageControlNetModel {
+    let controlnet = loadControlnet(transformer: transformer, config: transformerConfig)
+    let result = try await loadControlnetWeights(
+      controlnetSpec: controlnetSpec,
+      preferredFile: preferredFile,
+      progressCallback: progressCallback
+    )
+    ZImageControlWeightsMapping.applyControlnetWeights(
+      weights: result.weights,
+      to: controlnet,
+      manifest: result.manifest,
+      logger: logger
+    )
+    loadedControlnetWeightsId = controlnetSpec
+    return controlnet
   }
 
   private func loadVAE(snapshot _: URL, config: ZImageVAEConfig) throws -> AutoencoderKL {
@@ -618,12 +568,13 @@ public class ZImageControlPipeline {
   }
 
   public func unloadTransformer() {
+    controlnet = nil
     transformer = nil
     currentLoRA = nil
     currentLoRAConfig = nil
     loadedControlnetWeightsId = nil
     Memory.clearCache()
-    logger.info("Transformer unloaded for memory optimization")
+    logger.info("Transformer and controlnet unloaded for memory optimization")
   }
 
   private func getAvailableMemory() -> UInt64 {
@@ -674,10 +625,12 @@ public class ZImageControlPipeline {
       if canPreserveSharedComponents {
         logger.info("Switching Z-Image variant, preserving VAE and tokenizer")
         self.transformer = nil
+        self.controlnet = nil
         self.modelConfigs = nil
         self.quantManifest = nil
         self.snapshot = nil
         loadedWeightsVariant = nil
+        loadedControlnetWeightsId = nil
         currentLoRA = nil
         currentLoRAConfig = nil
         cachedPromptEmbedding = nil
@@ -686,10 +639,12 @@ public class ZImageControlPipeline {
         self.tokenizer = nil
         self.vae = nil
         self.transformer = nil
+        self.controlnet = nil
         self.modelConfigs = nil
         self.quantManifest = nil
         self.snapshot = nil
         loadedWeightsVariant = nil
+        loadedControlnetWeightsId = nil
         currentLoRA = nil
         currentLoRAConfig = nil
         cachedPromptEmbedding = nil
@@ -747,16 +702,17 @@ public class ZImageControlPipeline {
       } else {
         logger.info("Reusing cached VAE")
       }
-      logger.info("Loading control transformer...")
-      let transformer = try loadControlTransformer(snapshot: snapshot, config: modelConfigs.transformer)
+      logger.info("Loading transformer...")
+      let transformer = try loadTransformer(snapshot: snapshot, config: modelConfigs.transformer)
       let transformerWeights = try weightsMapper.loadTransformer()
-      ZImageControlWeightsMapping.applyControlTransformer(
+      ZImageWeightsMapping.applyTransformer(
         weights: transformerWeights,
         to: transformer,
         manifest: quantManifest,
         logger: logger
       )
       self.transformer = transformer
+      self.controlnet = nil
       loadedModelId = requestedModelId
       loadedWeightsVariant = requestedWeightsVariant
       loadedControlnetWeightsId = nil
@@ -768,43 +724,39 @@ public class ZImageControlPipeline {
         throw PipelineError.transformerNotLoaded
       }
       let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
-      logger.info("Loading control transformer...")
-      let transformer = try loadControlTransformer(snapshot: snapshot, config: modelConfigs.transformer)
+      logger.info("Loading transformer...")
+      let transformer = try loadTransformer(snapshot: snapshot, config: modelConfigs.transformer)
       let transformerWeights = try weightsMapper.loadTransformer()
-      ZImageControlWeightsMapping.applyControlTransformer(
+      ZImageWeightsMapping.applyTransformer(
         weights: transformerWeights,
         to: transformer,
         manifest: quantManifest,
         logger: logger
       )
       self.transformer = transformer
+      self.controlnet = nil
       loadedControlnetWeightsId = nil
     } else {
       logger.info("Reusing cached model \(requestedModelId)")
     }
-    if needsControlnetReload || needsModelReload {
-      if let controlnetSpec = requestedControlnetId {
+    if let controlnetSpec = requestedControlnetId {
+      if needsControlnetReload || needsModelReload || controlnet == nil {
+        guard let transformer, let modelConfigs else {
+          throw PipelineError.transformerNotLoaded
+        }
         logger.info("Loading controlnet weights from \(controlnetSpec)...")
-        let result = try await loadControlnetWeights(
+        controlnet = try await loadAppliedControlnet(
+          transformer: transformer,
+          transformerConfig: modelConfigs.transformer,
           controlnetSpec: controlnetSpec,
           preferredFile: request.controlnetWeightsFile,
           progressCallback: request.progressCallback
         )
-        ZImageControlWeightsMapping.applyControlnetWeights(
-          weights: result.weights,
-          to: transformer!,
-          manifest: result.manifest,
-          logger: logger
-        )
-        loadedControlnetWeightsId = controlnetSpec
       } else {
-        if loadedControlnetWeightsId != nil {
-          clearControlnetWeights()
-        }
-        loadedControlnetWeightsId = nil
+        logger.info("Reusing cached controlnet weights")
       }
-    } else if requestedControlnetId != nil {
-      logger.info("Reusing cached controlnet weights")
+    } else if controlnet != nil || loadedControlnetWeightsId != nil {
+      unloadControlnet()
     }
     try await applyLoRAIfNeeded(request.lora)
     guard let snapshot,
@@ -972,30 +924,26 @@ public class ZImageControlPipeline {
     if transformer == nil {
       logger.info("Reloading transformer after prompt encoding...")
       let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
-      let transformerModel = try loadControlTransformer(snapshot: snapshot, config: modelConfigs.transformer)
+      let transformerModel = try loadTransformer(snapshot: snapshot, config: modelConfigs.transformer)
       let transformerWeights = try weightsMapper.loadTransformer()
-      ZImageControlWeightsMapping.applyControlTransformer(
+      ZImageWeightsMapping.applyTransformer(
         weights: transformerWeights,
         to: transformerModel,
         manifest: quantManifest,
         logger: logger
       )
       transformer = transformerModel
+      controlnet = nil
       loadedControlnetWeightsId = nil
       if let controlnetSpec = request.controlnetWeights {
         logger.info("Reloading controlnet weights...")
-        let result = try await loadControlnetWeights(
+        controlnet = try await loadAppliedControlnet(
+          transformer: transformerModel,
+          transformerConfig: modelConfigs.transformer,
           controlnetSpec: controlnetSpec,
           preferredFile: request.controlnetWeightsFile,
           progressCallback: request.progressCallback
         )
-        ZImageControlWeightsMapping.applyControlnetWeights(
-          weights: result.weights,
-          to: transformer!,
-          manifest: result.manifest,
-          logger: logger
-        )
-        loadedControlnetWeightsId = controlnetSpec
       }
       if let loraConfig = request.lora {
         try await applyLoRAIfNeeded(loraConfig)
@@ -1024,12 +972,23 @@ public class ZImageControlPipeline {
           modelLatents = MLX.concatenated([latents, latents], axis: 0)
           embeds = MLX.concatenated([promptEmbeds, ne], axis: 0)
         }
+        let controlnetBlockSamples: ZImageControlBlockSamples? =
+          if let controlContext, let controlnet {
+            controlnet.forward(
+              latents: modelLatents,
+              timestep: timestepArray,
+              promptEmbeds: embeds,
+              controlContext: controlContext,
+              conditioningScale: request.controlContextScale
+            )
+          } else {
+            nil
+          }
         let noisePred = transformer.forward(
           latents: modelLatents,
           timestep: timestepArray,
           promptEmbeds: embeds,
-          controlContext: controlContext,
-          controlContextScale: request.controlContextScale
+          controlnetBlockSamples: controlnetBlockSamples
         )
         let guidedNoise: MLXArray
         if doCFG, negativeEmbeds != nil {
@@ -1045,6 +1004,7 @@ public class ZImageControlPipeline {
         MLX.eval(latents)
       }
       transformer.clearCache()
+      controlnet?.clearCache()
     }
     unloadTransformer()
     request.progressCallback?(
