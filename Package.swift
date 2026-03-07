@@ -53,7 +53,7 @@ let package = Package(
       ],
       path: "Tests/ZImageIntegrationTests",
       resources: [
-        .copy("Resources"),
+        .copy("Resources")
       ]
     ),
     .testTarget(

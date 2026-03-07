@@ -1,7 +1,7 @@
 import Foundation
 import MLX
-import MLXNN
 import MLXFast
+import MLXNN
 
 enum QwenTextEncoderError: Error {
   case visionTowerUnavailable
@@ -340,7 +340,8 @@ public final class QwenEncoderLayer: Module {
     self._selfAttention.wrappedValue = QwenAttention(configuration: configuration)
     self.mlp = QwenMLP(dimensions: configuration.hiddenSize, hiddenDimensions: configuration.intermediateSize)
     self._inputLayerNorm.wrappedValue = RMSNorm(dimensions: configuration.hiddenSize, eps: configuration.rmsNormEps)
-    self._postAttentionLayerNorm.wrappedValue = RMSNorm(dimensions: configuration.hiddenSize, eps: configuration.rmsNormEps)
+    self._postAttentionLayerNorm.wrappedValue = RMSNorm(
+      dimensions: configuration.hiddenSize, eps: configuration.rmsNormEps)
   }
 
   func callAsFunction(
@@ -474,7 +475,8 @@ extension QwenEncoder {
     return embedTokens.asLinear(h)
   }
 
-  private func createCausalMaskForGeneration(h: MLXArray, cache: KVCache?) -> MLXFast.ScaledDotProductAttentionMaskMode {
+  private func createCausalMaskForGeneration(h: MLXArray, cache: KVCache?) -> MLXFast.ScaledDotProductAttentionMaskMode
+  {
     let n = h.dim(1)
     if let cache = cache {
       return cache.makeMask(n: n)
@@ -582,7 +584,9 @@ extension QwenTextEncoder {
         }
         cursor += 1
       }
-      precondition(cursor == replacementCount, "[QwenTextEncoder] row \(row) consumed \(cursor) tokens, expected \(replacementCount)")
+      precondition(
+        cursor == replacementCount,
+        "[QwenTextEncoder] row \(row) consumed \(cursor) tokens, expected \(replacementCount)")
       let rowArray = MLXArray(rowValues, [seqLen, hiddenDim]).asType(hiddenStates.dtype)
       updatedRows.append(rowArray)
     }

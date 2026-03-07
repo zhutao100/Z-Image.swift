@@ -304,7 +304,8 @@ public enum ZImageWeightsParameters {
       guard key.hasPrefix(prefix) else { continue }
       let suffix = key.dropFirst(prefix.count)
       if let dotIndex = suffix.firstIndex(of: "."),
-         let value = Int(suffix[..<dotIndex]) {
+        let value = Int(suffix[..<dotIndex])
+      {
         indices.insert(value)
       }
     }

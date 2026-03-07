@@ -1,6 +1,7 @@
-import XCTest
-import MLX
 import Logging
+import MLX
+import XCTest
+
 @testable import ZImage
 
 final class AIOCheckpointTests: XCTestCase {

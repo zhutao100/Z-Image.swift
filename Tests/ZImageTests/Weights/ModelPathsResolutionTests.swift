@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import ZImage
 
 final class ModelPathsResolutionTests: XCTestCase {
@@ -36,14 +37,14 @@ final class ModelPathsResolutionTests: XCTestCase {
         // Index weight_map values may already include the component prefix; accept either style.
         let transformerIndex = snapshot.appending(path: ZImageFiles.transformerIndex)
         let prefixedTransformerIndex = """
-        {
-          "weight_map": {
-            "model.diffusion_model.layers.0.weight": "transformer/diffusion_pytorch_model-00001-of-00003.safetensors",
-            "model.diffusion_model.layers.1.weight": "transformer/diffusion_pytorch_model-00002-of-00003.safetensors",
-            "model.diffusion_model.layers.2.weight": "transformer/diffusion_pytorch_model-00003-of-00003.safetensors"
+          {
+            "weight_map": {
+              "model.diffusion_model.layers.0.weight": "transformer/diffusion_pytorch_model-00001-of-00003.safetensors",
+              "model.diffusion_model.layers.1.weight": "transformer/diffusion_pytorch_model-00002-of-00003.safetensors",
+              "model.diffusion_model.layers.2.weight": "transformer/diffusion_pytorch_model-00003-of-00003.safetensors"
+            }
           }
-        }
-        """
+          """
         try prefixedTransformerIndex.data(using: .utf8)!.write(to: transformerIndex)
         XCTAssertEqual(
           ZImageFiles.resolveTransformerWeights(at: snapshot),
@@ -53,8 +54,8 @@ final class ModelPathsResolutionTests: XCTestCase {
 
         // If the index exists but points to missing shards, fall back to directory discovery.
         let missingTransformerIndex = """
-        { "weight_map": { "missing.weight": "diffusion_pytorch_model-99999-of-99999.safetensors" } }
-        """
+          { "weight_map": { "missing.weight": "diffusion_pytorch_model-99999-of-99999.safetensors" } }
+          """
         try missingTransformerIndex.data(using: .utf8)!.write(to: transformerIndex)
         XCTAssertEqual(
           ZImageFiles.resolveTransformerWeights(at: snapshot),
@@ -71,8 +72,8 @@ final class ModelPathsResolutionTests: XCTestCase {
 
         let textEncoderIndex = snapshot.appending(path: ZImageFiles.textEncoderIndex)
         let missingTextEncoderIndex = """
-        { "weight_map": { "missing.weight": "model-99999-of-99999.safetensors" } }
-        """
+          { "weight_map": { "missing.weight": "model-99999-of-99999.safetensors" } }
+          """
         try missingTextEncoderIndex.data(using: .utf8)!.write(to: textEncoderIndex)
         XCTAssertEqual(
           ZImageFiles.resolveTextEncoderWeights(at: snapshot),

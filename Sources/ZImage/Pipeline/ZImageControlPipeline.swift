@@ -7,9 +7,10 @@ import MLX
 import MLXNN
 import MLXRandom
 import Tokenizers
+
 #if canImport(CoreGraphics)
-import CoreGraphics
-import ImageIO
+  import CoreGraphics
+  import ImageIO
 #endif
 public struct ControlProgress: Sendable {
   public let stage: String
@@ -17,7 +18,8 @@ public struct ControlProgress: Sendable {
   public let totalSteps: Int
   public let fractionCompleted: Double
   public let enhancedPrompt: String?
-  public init(stage: String, stepIndex: Int, totalSteps: Int, fractionCompleted: Double, enhancedPrompt: String? = nil) {
+  public init(stage: String, stepIndex: Int, totalSteps: Int, fractionCompleted: Double, enhancedPrompt: String? = nil)
+  {
     self.stage = stage
     self.stepIndex = stepIndex
     self.totalSteps = totalSteps
@@ -32,15 +34,15 @@ public struct ZImageControlGenerationRequest {
   public var negativePrompt: String?
   public var controlImage: URL?
   #if canImport(CoreGraphics)
-  public var controlImageCG: CGImage?
+    public var controlImageCG: CGImage?
   #endif
   public var inpaintImage: URL?
   #if canImport(CoreGraphics)
-  public var inpaintImageCG: CGImage?
+    public var inpaintImageCG: CGImage?
   #endif
   public var maskImage: URL?
   #if canImport(CoreGraphics)
-  public var maskImageCG: CGImage?
+    public var maskImageCG: CGImage?
   #endif
   public var controlContextScale: Float
   public var width: Int
@@ -105,53 +107,53 @@ public struct ZImageControlGenerationRequest {
   }
 
   #if canImport(CoreGraphics)
-  public init(
-    prompt: String,
-    negativePrompt: String? = nil,
-    controlImageCG: CGImage?,
-    inpaintImageCG: CGImage? = nil,
-    maskImageCG: CGImage? = nil,
-    controlContextScale: Float = 0.75,
-    width: Int = ZImageModelMetadata.recommendedWidth,
-    height: Int = ZImageModelMetadata.recommendedHeight,
-    steps: Int = ZImageModelMetadata.recommendedInferenceSteps,
-    guidanceScale: Float = ZImageModelMetadata.recommendedGuidanceScale,
-    seed: UInt64? = nil,
-    model: String? = nil,
-    weightsVariant: String? = nil,
-    controlnetWeights: String? = nil,
-    controlnetWeightsFile: String? = nil,
-    maxSequenceLength: Int = 512,
-    lora: LoRAConfiguration? = nil,
-    progressCallback: ControlProgressCallback? = nil,
-    enhancePrompt: Bool = false,
-    enhanceMaxTokens: Int = 512
-  ) {
-    self.prompt = prompt
-    self.negativePrompt = negativePrompt
-    controlImage = nil
-    self.controlImageCG = controlImageCG
-    inpaintImage = nil
-    self.inpaintImageCG = inpaintImageCG
-    maskImage = nil
-    self.maskImageCG = maskImageCG
-    self.controlContextScale = controlContextScale
-    self.width = width
-    self.height = height
-    self.steps = steps
-    self.guidanceScale = guidanceScale
-    self.seed = seed
-    outputPath = nil
-    self.model = model
-    self.weightsVariant = weightsVariant
-    self.controlnetWeights = controlnetWeights
-    self.controlnetWeightsFile = controlnetWeightsFile
-    self.maxSequenceLength = maxSequenceLength
-    self.lora = lora
-    self.progressCallback = progressCallback
-    self.enhancePrompt = enhancePrompt
-    self.enhanceMaxTokens = enhanceMaxTokens
-  }
+    public init(
+      prompt: String,
+      negativePrompt: String? = nil,
+      controlImageCG: CGImage?,
+      inpaintImageCG: CGImage? = nil,
+      maskImageCG: CGImage? = nil,
+      controlContextScale: Float = 0.75,
+      width: Int = ZImageModelMetadata.recommendedWidth,
+      height: Int = ZImageModelMetadata.recommendedHeight,
+      steps: Int = ZImageModelMetadata.recommendedInferenceSteps,
+      guidanceScale: Float = ZImageModelMetadata.recommendedGuidanceScale,
+      seed: UInt64? = nil,
+      model: String? = nil,
+      weightsVariant: String? = nil,
+      controlnetWeights: String? = nil,
+      controlnetWeightsFile: String? = nil,
+      maxSequenceLength: Int = 512,
+      lora: LoRAConfiguration? = nil,
+      progressCallback: ControlProgressCallback? = nil,
+      enhancePrompt: Bool = false,
+      enhanceMaxTokens: Int = 512
+    ) {
+      self.prompt = prompt
+      self.negativePrompt = negativePrompt
+      controlImage = nil
+      self.controlImageCG = controlImageCG
+      inpaintImage = nil
+      self.inpaintImageCG = inpaintImageCG
+      maskImage = nil
+      self.maskImageCG = maskImageCG
+      self.controlContextScale = controlContextScale
+      self.width = width
+      self.height = height
+      self.steps = steps
+      self.guidanceScale = guidanceScale
+      self.seed = seed
+      outputPath = nil
+      self.model = model
+      self.weightsVariant = weightsVariant
+      self.controlnetWeights = controlnetWeights
+      self.controlnetWeightsFile = controlnetWeightsFile
+      self.maxSequenceLength = maxSequenceLength
+      self.lora = lora
+      self.progressCallback = progressCallback
+      self.enhancePrompt = enhancePrompt
+      self.enhanceMaxTokens = enhanceMaxTokens
+    }
   #endif
 }
 
@@ -311,7 +313,9 @@ public class ZImageControlPipeline {
     )
   }
 
-  private func loadControlTransformer(snapshot _: URL, config: ZImageTransformerConfig) throws -> ZImageControlTransformer2DModel {
+  private func loadControlTransformer(snapshot _: URL, config: ZImageTransformerConfig) throws
+    -> ZImageControlTransformer2DModel
+  {
     let controlConfig = ZImageControlTransformerConfig(
       inChannels: config.inChannels,
       dim: config.dim,
@@ -331,23 +335,27 @@ public class ZImageControlPipeline {
   }
 
   private func loadVAE(snapshot _: URL, config: ZImageVAEConfig) throws -> AutoencoderKL {
-    AutoencoderKL(configuration: .init(
-      inChannels: config.inChannels,
-      outChannels: config.outChannels,
-      latentChannels: config.latentChannels,
-      scalingFactor: config.scalingFactor,
-      shiftFactor: config.shiftFactor,
-      blockOutChannels: config.blockOutChannels,
-      layersPerBlock: config.layersPerBlock,
-      normNumGroups: config.normNumGroups,
-      sampleSize: config.sampleSize,
-      midBlockAddAttention: config.midBlockAddAttention
-    ))
+    AutoencoderKL(
+      configuration: .init(
+        inChannels: config.inChannels,
+        outChannels: config.outChannels,
+        latentChannels: config.latentChannels,
+        scalingFactor: config.scalingFactor,
+        shiftFactor: config.shiftFactor,
+        blockOutChannels: config.blockOutChannels,
+        layersPerBlock: config.layersPerBlock,
+        normNumGroups: config.normNumGroups,
+        sampleSize: config.sampleSize,
+        midBlockAddAttention: config.midBlockAddAttention
+      ))
   }
 
-  private func encodePrompt(_ prompt: String, tokenizer: QwenTokenizer, textEncoder: QwenTextEncoder, maxLength: Int) throws -> (MLXArray, MLXArray) {
+  private func encodePrompt(_ prompt: String, tokenizer: QwenTokenizer, textEncoder: QwenTextEncoder, maxLength: Int)
+    throws -> (MLXArray, MLXArray)
+  {
     do {
-      let result = try PipelineUtilities.encodePrompt(prompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: maxLength)
+      let result = try PipelineUtilities.encodePrompt(
+        prompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: maxLength)
       return (result.embeddings, result.mask)
     } catch {
       throw PipelineError.textEncoderNotLoaded
@@ -362,200 +370,203 @@ public class ZImageControlPipeline {
     targetWidth: Int
   ) throws -> MLXArray {
     #if canImport(CoreGraphics)
-    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
-          let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
-    else {
-      throw PipelineError.controlImageLoadFailed("Failed to load image from \(url.path)")
-    }
-    return try loadControlImage(
-      cgImage: cgImage,
-      vae: vae,
-      vaeConfig: vaeConfig,
-      targetHeight: targetHeight,
-      targetWidth: targetWidth
-    )
+      guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+        let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
+      else {
+        throw PipelineError.controlImageLoadFailed("Failed to load image from \(url.path)")
+      }
+      return try loadControlImage(
+        cgImage: cgImage,
+        vae: vae,
+        vaeConfig: vaeConfig,
+        targetHeight: targetHeight,
+        targetWidth: targetWidth
+      )
     #else
-    throw PipelineError.controlImageLoadFailed("CoreGraphics not available on this platform")
+      throw PipelineError.controlImageLoadFailed("CoreGraphics not available on this platform")
     #endif
   }
 
   #if canImport(CoreGraphics)
-  private func loadCGImage(from url: URL) -> CGImage? {
-    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
-          let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
-    else {
-      return nil
-    }
-    return cgImage
-  }
-
-  private func encodeImageToLatents(
-    cgImage: CGImage,
-    vae: AutoencoderKL,
-    vaeConfig: ZImageVAEConfig,
-    pixelH: Int,
-    pixelW: Int
-  ) throws -> MLXArray {
-    let imageArray = try QwenImageIO.resizedPixelArray(
-      from: cgImage,
-      width: pixelW,
-      height: pixelH,
-      addBatchDimension: true,
-      dtype: .float32
-    )
-    let normalized = QwenImageIO.normalizeForEncoder(imageArray)
-    let encodedLatents = vae.encode(normalized)
-    let latentChannels = vaeConfig.latentChannels
-    let latents = encodedLatents[0..., 0 ..< latentChannels, 0..., 0...]
-    return (latents - vaeConfig.shiftFactor) * vaeConfig.scalingFactor
-  }
-
-  private func convertToRGBA(_ image: CGImage) -> CGImage? {
-    let width = image.width
-    let height = image.height
-    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-    let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
-    guard let context = CGContext(
-      data: nil,
-      width: width,
-      height: height,
-      bitsPerComponent: 8,
-      bytesPerRow: width * 4,
-      space: colorSpace,
-      bitmapInfo: bitmapInfo
-    ) else {
-      return nil
-    }
-    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-    return context.makeImage()
-  }
-
-  private func processMaskToLatent(
-    cgImage: CGImage,
-    latentH: Int,
-    latentW: Int
-  ) throws -> MLXArray {
-    guard let rgbaImage = convertToRGBA(cgImage) else {
-      throw PipelineError.controlImageLoadFailed("Failed to convert mask to RGBA")
-    }
-    let maskArray = try QwenImageIO.resizedPixelArray(
-      from: rgbaImage,
-      width: latentW,
-      height: latentH,
-      addBatchDimension: true,
-      dtype: .float32,
-      interpolation: .none
-    )
-    guard maskArray.ndim == 4 else {
-      throw PipelineError.controlImageLoadFailed("Mask array has wrong dimensions: \(maskArray.shape)")
-    }
-    let grayscale = MLX.mean(maskArray, axis: 1, keepDims: true)
-    return MLX.where(grayscale .>= 0.5, MLXArray(Float(1.0)), MLXArray(Float(0.0)))
-  }
-
-  private func buildControlContext(
-    controlImage: CGImage?,
-    inpaintImage: CGImage?,
-    maskImage: CGImage?,
-    vae: AutoencoderKL,
-    vaeConfig: ZImageVAEConfig,
-    targetHeight: Int,
-    targetWidth: Int
-  ) throws -> MLXArray {
-    let vaeDivisor = vaeConfig.latentDivisor
-    let latentH = max(1, targetHeight / vaeDivisor)
-    let latentW = max(1, targetWidth / vaeDivisor)
-    let pixelH = latentH * vaeDivisor
-    let pixelW = latentW * vaeDivisor
-    let controlLatents: MLXArray = if let control = controlImage {
-      try encodeImageToLatents(
-        cgImage: control,
-        vae: vae,
-        vaeConfig: vaeConfig,
-        pixelH: pixelH,
-        pixelW: pixelW
-      )
-    } else {
-      MLXArray.zeros([1, 16, latentH, latentW])
-    }
-    let pixelMask: MLXArray?
-    if let mask = maskImage {
-      guard let rgbaMask = convertToRGBA(mask) else {
-        throw PipelineError.controlImageLoadFailed("Failed to convert mask to RGBA")
+    private func loadCGImage(from url: URL) -> CGImage? {
+      guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+        let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil)
+      else {
+        return nil
       }
-      let maskPixels = try QwenImageIO.resizedPixelArray(
-        from: rgbaMask,
-        width: pixelW,
-        height: pixelH,
-        addBatchDimension: true,
-        dtype: .float32,
-        interpolation: .high
-      )
-      let grayscaleMask = MLX.mean(maskPixels, axis: 1, keepDims: true)
-      pixelMask = MLX.where(grayscaleMask .>= 0.5, MLXArray(Float(1.0)), MLXArray(Float(0.0)))
-    } else {
-      pixelMask = nil
+      return cgImage
     }
-    let inpaintLatents: MLXArray
-    if let inpaint = inpaintImage {
-      guard let rgbaInpaint = convertToRGBA(inpaint) else {
-        throw PipelineError.controlImageLoadFailed("Failed to convert inpaint image to RGBA")
-      }
-      let inpaintPixels = try QwenImageIO.resizedPixelArray(
-        from: rgbaInpaint,
+
+    private func encodeImageToLatents(
+      cgImage: CGImage,
+      vae: AutoencoderKL,
+      vaeConfig: ZImageVAEConfig,
+      pixelH: Int,
+      pixelW: Int
+    ) throws -> MLXArray {
+      let imageArray = try QwenImageIO.resizedPixelArray(
+        from: cgImage,
         width: pixelW,
         height: pixelH,
         addBatchDimension: true,
         dtype: .float32
       )
-      let normalized = (inpaintPixels * 2.0) - 1.0
-      var maskedNormalized = normalized
-      if let mask = pixelMask {
-        let keepMask = MLX.less(mask, MLXArray(Float(0.5)))
-        maskedNormalized = normalized * keepMask.asType(normalized.dtype)
-      }
-      MLX.eval(maskedNormalized)
-      let shiftFactor = MLXArray(vaeConfig.shiftFactor)
-      let scaleFactor = MLXArray(vaeConfig.scalingFactor)
+      let normalized = QwenImageIO.normalizeForEncoder(imageArray)
+      let encodedLatents = vae.encode(normalized)
       let latentChannels = vaeConfig.latentChannels
-      let encoded = vae.encode(maskedNormalized)
-      let latents = encoded[0..., 0 ..< latentChannels, 0..., 0...]
-      inpaintLatents = (latents - shiftFactor) * scaleFactor
-    } else {
-      inpaintLatents = MLXArray.zeros([1, 16, latentH, latentW])
+      let latents = encodedLatents[0..., 0..<latentChannels, 0..., 0...]
+      return (latents - vaeConfig.shiftFactor) * vaeConfig.scalingFactor
     }
-    let maskCondition: MLXArray
-    if let mask = pixelMask {
-      let invertedMask = 1.0 - mask
-      var nhwc = invertedMask.transposed(0, 2, 3, 1)
-      let hScale = Float(latentH) / Float(pixelH)
-      let wScale = Float(latentW) / Float(pixelW)
-      nhwc = MLXNN.Upsample(scaleFactor: .array([hScale, wScale]), mode: .nearest)(nhwc)
-      maskCondition = nhwc.transposed(0, 3, 1, 2)
-    } else {
-      maskCondition = MLXArray.zeros([1, 1, latentH, latentW])
-    }
-    let combined = MLX.concatenated([controlLatents, maskCondition, inpaintLatents], axis: 1)
-    return MLX.expandedDimensions(combined, axis: 2)
-  }
 
-  private func loadControlImage(
-    cgImage: CGImage,
-    vae: AutoencoderKL,
-    vaeConfig: ZImageVAEConfig,
-    targetHeight: Int,
-    targetWidth: Int
-  ) throws -> MLXArray {
-    try buildControlContext(
-      controlImage: cgImage,
-      inpaintImage: nil,
-      maskImage: nil,
-      vae: vae,
-      vaeConfig: vaeConfig,
-      targetHeight: targetHeight,
-      targetWidth: targetWidth
-    )
-  }
+    private func convertToRGBA(_ image: CGImage) -> CGImage? {
+      let width = image.width
+      let height = image.height
+      let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+      let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+      guard
+        let context = CGContext(
+          data: nil,
+          width: width,
+          height: height,
+          bitsPerComponent: 8,
+          bytesPerRow: width * 4,
+          space: colorSpace,
+          bitmapInfo: bitmapInfo
+        )
+      else {
+        return nil
+      }
+      context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return context.makeImage()
+    }
+
+    private func processMaskToLatent(
+      cgImage: CGImage,
+      latentH: Int,
+      latentW: Int
+    ) throws -> MLXArray {
+      guard let rgbaImage = convertToRGBA(cgImage) else {
+        throw PipelineError.controlImageLoadFailed("Failed to convert mask to RGBA")
+      }
+      let maskArray = try QwenImageIO.resizedPixelArray(
+        from: rgbaImage,
+        width: latentW,
+        height: latentH,
+        addBatchDimension: true,
+        dtype: .float32,
+        interpolation: .none
+      )
+      guard maskArray.ndim == 4 else {
+        throw PipelineError.controlImageLoadFailed("Mask array has wrong dimensions: \(maskArray.shape)")
+      }
+      let grayscale = MLX.mean(maskArray, axis: 1, keepDims: true)
+      return MLX.where(grayscale .>= 0.5, MLXArray(Float(1.0)), MLXArray(Float(0.0)))
+    }
+
+    private func buildControlContext(
+      controlImage: CGImage?,
+      inpaintImage: CGImage?,
+      maskImage: CGImage?,
+      vae: AutoencoderKL,
+      vaeConfig: ZImageVAEConfig,
+      targetHeight: Int,
+      targetWidth: Int
+    ) throws -> MLXArray {
+      let vaeDivisor = vaeConfig.latentDivisor
+      let latentH = max(1, targetHeight / vaeDivisor)
+      let latentW = max(1, targetWidth / vaeDivisor)
+      let pixelH = latentH * vaeDivisor
+      let pixelW = latentW * vaeDivisor
+      let controlLatents: MLXArray =
+        if let control = controlImage {
+          try encodeImageToLatents(
+            cgImage: control,
+            vae: vae,
+            vaeConfig: vaeConfig,
+            pixelH: pixelH,
+            pixelW: pixelW
+          )
+        } else {
+          MLXArray.zeros([1, 16, latentH, latentW])
+        }
+      let pixelMask: MLXArray?
+      if let mask = maskImage {
+        guard let rgbaMask = convertToRGBA(mask) else {
+          throw PipelineError.controlImageLoadFailed("Failed to convert mask to RGBA")
+        }
+        let maskPixels = try QwenImageIO.resizedPixelArray(
+          from: rgbaMask,
+          width: pixelW,
+          height: pixelH,
+          addBatchDimension: true,
+          dtype: .float32,
+          interpolation: .high
+        )
+        let grayscaleMask = MLX.mean(maskPixels, axis: 1, keepDims: true)
+        pixelMask = MLX.where(grayscaleMask .>= 0.5, MLXArray(Float(1.0)), MLXArray(Float(0.0)))
+      } else {
+        pixelMask = nil
+      }
+      let inpaintLatents: MLXArray
+      if let inpaint = inpaintImage {
+        guard let rgbaInpaint = convertToRGBA(inpaint) else {
+          throw PipelineError.controlImageLoadFailed("Failed to convert inpaint image to RGBA")
+        }
+        let inpaintPixels = try QwenImageIO.resizedPixelArray(
+          from: rgbaInpaint,
+          width: pixelW,
+          height: pixelH,
+          addBatchDimension: true,
+          dtype: .float32
+        )
+        let normalized = (inpaintPixels * 2.0) - 1.0
+        var maskedNormalized = normalized
+        if let mask = pixelMask {
+          let keepMask = MLX.less(mask, MLXArray(Float(0.5)))
+          maskedNormalized = normalized * keepMask.asType(normalized.dtype)
+        }
+        MLX.eval(maskedNormalized)
+        let shiftFactor = MLXArray(vaeConfig.shiftFactor)
+        let scaleFactor = MLXArray(vaeConfig.scalingFactor)
+        let latentChannels = vaeConfig.latentChannels
+        let encoded = vae.encode(maskedNormalized)
+        let latents = encoded[0..., 0..<latentChannels, 0..., 0...]
+        inpaintLatents = (latents - shiftFactor) * scaleFactor
+      } else {
+        inpaintLatents = MLXArray.zeros([1, 16, latentH, latentW])
+      }
+      let maskCondition: MLXArray
+      if let mask = pixelMask {
+        let invertedMask = 1.0 - mask
+        var nhwc = invertedMask.transposed(0, 2, 3, 1)
+        let hScale = Float(latentH) / Float(pixelH)
+        let wScale = Float(latentW) / Float(pixelW)
+        nhwc = MLXNN.Upsample(scaleFactor: .array([hScale, wScale]), mode: .nearest)(nhwc)
+        maskCondition = nhwc.transposed(0, 3, 1, 2)
+      } else {
+        maskCondition = MLXArray.zeros([1, 1, latentH, latentW])
+      }
+      let combined = MLX.concatenated([controlLatents, maskCondition, inpaintLatents], axis: 1)
+      return MLX.expandedDimensions(combined, axis: 2)
+    }
+
+    private func loadControlImage(
+      cgImage: CGImage,
+      vae: AutoencoderKL,
+      vaeConfig: ZImageVAEConfig,
+      targetHeight: Int,
+      targetWidth: Int
+    ) throws -> MLXArray {
+      try buildControlContext(
+        controlImage: cgImage,
+        inpaintImage: nil,
+        maskImage: nil,
+        vae: vae,
+        vaeConfig: vaeConfig,
+        targetHeight: targetHeight,
+        targetWidth: targetWidth
+      )
+    }
   #endif
   private func applyLoRAIfNeeded(_ requestedConfig: LoRAConfiguration?) async throws {
     guard let transformer else {
@@ -648,7 +659,8 @@ public class ZImageControlPipeline {
     let needsModelReload = (loadedModelId != requestedModelId) || (loadedWeightsVariant != requestedWeightsVariant)
     let needsControlnetReload = (loadedControlnetWeightsId != requestedControlnetId)
     if needsModelReload {
-      let canPreserveSharedComponents = loadedModelId != nil
+      let canPreserveSharedComponents =
+        loadedModelId != nil
         && loadedModelId != requestedModelId
         && loadedWeightsVariant == requestedWeightsVariant
         && ZImageModelRegistry.areZImageVariants(loadedModelId ?? "", requestedModelId)
@@ -677,15 +689,21 @@ public class ZImageControlPipeline {
         GPU.clearCache()
       }
       logger.info("Loading model \(requestedModelId)...")
-      let snapshotValidator: (@Sendable (URL) -> Bool)? = if let requestedWeightsVariant {
-        { [logger] snapshot in
-          !ZImageFiles.resolveTransformerWeights(at: snapshot, weightsVariant: requestedWeightsVariant, logger: logger).isEmpty
-            && !ZImageFiles.resolveTextEncoderWeights(at: snapshot, weightsVariant: requestedWeightsVariant, logger: logger).isEmpty
-            && !ZImageFiles.resolveVAEWeights(at: snapshot, weightsVariant: requestedWeightsVariant, logger: logger).isEmpty
+      let snapshotValidator: (@Sendable (URL) -> Bool)? =
+        if let requestedWeightsVariant {
+          { [logger] snapshot in
+            !ZImageFiles.resolveTransformerWeights(
+              at: snapshot, weightsVariant: requestedWeightsVariant, logger: logger
+            ).isEmpty
+              && !ZImageFiles.resolveTextEncoderWeights(
+                at: snapshot, weightsVariant: requestedWeightsVariant, logger: logger
+              ).isEmpty
+              && !ZImageFiles.resolveVAEWeights(at: snapshot, weightsVariant: requestedWeightsVariant, logger: logger)
+                .isEmpty
+          }
+        } else {
+          nil
         }
-      } else {
-        nil
-      }
       let snapshot = try await PipelineSnapshot.prepare(
         model: request.model,
         weightsVariant: requestedWeightsVariant,
@@ -693,10 +711,12 @@ public class ZImageControlPipeline {
         logger: logger
       )
       let modelConfigs = try ZImageModelConfigs.load(from: snapshot)
-      let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: requestedWeightsVariant, logger: logger)
+      let weightsMapper = ZImageWeightsMapper(
+        snapshot: snapshot, weightsVariant: requestedWeightsVariant, logger: logger)
       let quantManifest = weightsMapper.loadQuantizationManifest()
       if quantManifest == nil {
-        try ZImageFiles.validateRequiredComponentWeights(at: snapshot, weightsVariant: requestedWeightsVariant, logger: logger)
+        try ZImageFiles.validateRequiredComponentWeights(
+          at: snapshot, weightsVariant: requestedWeightsVariant, logger: logger)
       }
       if let manifest = quantManifest {
         logger.info("Loading quantized model (bits=\(manifest.bits), group_size=\(manifest.groupSize))")
@@ -736,7 +756,7 @@ public class ZImageControlPipeline {
     } else if transformer == nil {
       logger.info("Reloading transformer (cache preserved)...")
       guard let snapshot = self.snapshot,
-            let modelConfigs = self.modelConfigs
+        let modelConfigs = self.modelConfigs
       else {
         throw PipelineError.transformerNotLoaded
       }
@@ -781,9 +801,9 @@ public class ZImageControlPipeline {
     }
     try await applyLoRAIfNeeded(request.lora)
     guard let snapshot,
-          let modelConfigs,
-          let tokenizer,
-          let vae
+      let modelConfigs,
+      let tokenizer,
+      let vae
     else {
       throw PipelineError.transformerNotLoaded
     }
@@ -791,49 +811,54 @@ public class ZImageControlPipeline {
     let promptEmbeds: MLXArray
     let negativeEmbeds: MLXArray?
     if let cached = cachedPromptEmbedding,
-       cached.prompt == request.prompt,
-       cached.negativePrompt == request.negativePrompt,
-       cached.maxSequenceLength == request.maxSequenceLength,
-       cached.enhancePrompt == request.enhancePrompt,
-       cached.enhanceMaxTokens == request.enhanceMaxTokens
+      cached.prompt == request.prompt,
+      cached.negativePrompt == request.negativePrompt,
+      cached.maxSequenceLength == request.maxSequenceLength,
+      cached.enhancePrompt == request.enhancePrompt,
+      cached.enhanceMaxTokens == request.enhanceMaxTokens
     {
       logger.info("Reusing cached prompt embeddings")
       promptEmbeds = cached.promptEmbeds
       negativeEmbeds = cached.negativeEmbeds
       if let enhancedPrompt = cached.enhancedPrompt {
-        request.progressCallback?(ControlProgress(
-          stage: "Prompt enhanced",
-          stepIndex: 0, totalSteps: 0, fractionCompleted: 0,
-          enhancedPrompt: enhancedPrompt
-        ))
+        request.progressCallback?(
+          ControlProgress(
+            stage: "Prompt enhanced",
+            stepIndex: 0, totalSteps: 0, fractionCompleted: 0,
+            enhancedPrompt: enhancedPrompt
+          ))
       }
     } else {
       if request.enhancePrompt, transformer != nil {
         let availableMemory = getAvailableMemory()
         let textEncoderSize: UInt64 = 6 * 1024 * 1024 * 1024
         if availableMemory < textEncoderSize {
-          logger.info("Low memory (\(availableMemory / 1024 / 1024)MB available), offloading transformer before enhancement...")
+          logger.info(
+            "Low memory (\(availableMemory / 1024 / 1024)MB available), offloading transformer before enhancement...")
           unloadTransformer()
         } else {
           logger.info("Sufficient memory (\(availableMemory / 1024 / 1024)MB available), keeping transformer loaded")
         }
       }
-      request.progressCallback?(ControlProgress(
-        stage: "Loading text encoder",
-        stepIndex: 0, totalSteps: 0, fractionCompleted: 0
-      ))
+      request.progressCallback?(
+        ControlProgress(
+          stage: "Loading text encoder",
+          stepIndex: 0, totalSteps: 0, fractionCompleted: 0
+        ))
       logger.info("Loading text encoder...")
       let textEncoder = try loadTextEncoder(snapshot: snapshot, config: modelConfigs.textEncoder)
       let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
       let textEncoderWeights = try weightsMapper.loadTextEncoder()
-      ZImageWeightsMapping.applyTextEncoder(weights: textEncoderWeights, to: textEncoder, manifest: quantManifest, logger: logger)
+      ZImageWeightsMapping.applyTextEncoder(
+        weights: textEncoderWeights, to: textEncoder, manifest: quantManifest, logger: logger)
       var finalPrompt = request.prompt
       var enhancedPromptForCache: String? = nil
       if request.enhancePrompt {
-        request.progressCallback?(ControlProgress(
-          stage: "Enhancing prompt",
-          stepIndex: 0, totalSteps: 0, fractionCompleted: 0
-        ))
+        request.progressCallback?(
+          ControlProgress(
+            stage: "Enhancing prompt",
+            stepIndex: 0, totalSteps: 0, fractionCompleted: 0
+          ))
         logger.info("Enhancing prompt using LLM (max tokens: \(request.enhanceMaxTokens))...")
         let enhanceConfig = PromptEnhanceConfig(maxNewTokens: request.enhanceMaxTokens)
         let enhanced = try textEncoder.enhancePrompt(request.prompt, tokenizer: tokenizer, config: enhanceConfig)
@@ -843,18 +868,22 @@ public class ZImageControlPipeline {
           logger.info("Enhanced prompt: \(enhanced)")
           finalPrompt = enhanced
           enhancedPromptForCache = enhanced
-          request.progressCallback?(ControlProgress(
-            stage: "Prompt enhanced",
-            stepIndex: 0, totalSteps: 0, fractionCompleted: 0,
-            enhancedPrompt: enhanced
-          ))
+          request.progressCallback?(
+            ControlProgress(
+              stage: "Prompt enhanced",
+              stepIndex: 0, totalSteps: 0, fractionCompleted: 0,
+              enhancedPrompt: enhanced
+            ))
         }
         GPU.clearCache()
       }
-      let (pe, _) = try encodePrompt(finalPrompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: request.maxSequenceLength)
+      let (pe, _) = try encodePrompt(
+        finalPrompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: request.maxSequenceLength)
       promptEmbeds = pe
       if doCFG {
-        let (ne, _) = try encodePrompt(request.negativePrompt ?? "", tokenizer: tokenizer, textEncoder: textEncoder, maxLength: request.maxSequenceLength)
+        let (ne, _) = try encodePrompt(
+          request.negativePrompt ?? "", tokenizer: tokenizer, textEncoder: textEncoder,
+          maxLength: request.maxSequenceLength)
         negativeEmbeds = ne
         MLX.eval(promptEmbeds, ne)
       } else {
@@ -875,38 +904,40 @@ public class ZImageControlPipeline {
     }
     var controlContext: MLXArray? = nil
     #if canImport(CoreGraphics)
-    let controlCG: CGImage? = request.controlImageCG ?? (request.controlImage.flatMap { loadCGImage(from: $0) })
-    let inpaintCG: CGImage? = request.inpaintImageCG ?? (request.inpaintImage.flatMap { loadCGImage(from: $0) })
-    let maskCG: CGImage? = request.maskImageCG ?? (request.maskImage.flatMap { loadCGImage(from: $0) })
-    if controlCG != nil || inpaintCG != nil || maskCG != nil {
-      logger.info("Building control context (control=\(controlCG != nil), inpaint=\(inpaintCG != nil), mask=\(maskCG != nil))...")
-      let result = try buildControlContext(
-        controlImage: controlCG,
-        inpaintImage: inpaintCG,
-        maskImage: maskCG,
-        vae: vae,
-        vaeConfig: modelConfigs.vae,
-        targetHeight: request.height,
-        targetWidth: request.width
-      )
-      MLX.eval(result)
-      logger.info("Control context built, shape: \(result.shape)")
-      controlContext = result.asType(.bfloat16)
-    }
+      let controlCG: CGImage? = request.controlImageCG ?? (request.controlImage.flatMap { loadCGImage(from: $0) })
+      let inpaintCG: CGImage? = request.inpaintImageCG ?? (request.inpaintImage.flatMap { loadCGImage(from: $0) })
+      let maskCG: CGImage? = request.maskImageCG ?? (request.maskImage.flatMap { loadCGImage(from: $0) })
+      if controlCG != nil || inpaintCG != nil || maskCG != nil {
+        logger.info(
+          "Building control context (control=\(controlCG != nil), inpaint=\(inpaintCG != nil), mask=\(maskCG != nil))..."
+        )
+        let result = try buildControlContext(
+          controlImage: controlCG,
+          inpaintImage: inpaintCG,
+          maskImage: maskCG,
+          vae: vae,
+          vaeConfig: modelConfigs.vae,
+          targetHeight: request.height,
+          targetWidth: request.width
+        )
+        MLX.eval(result)
+        logger.info("Control context built, shape: \(result.shape)")
+        controlContext = result.asType(.bfloat16)
+      }
     #else
-    if let controlImageURL = request.controlImage {
-      logger.info("Loading control image from \(controlImageURL.path)...")
-      let context = try loadControlImage(
-        url: controlImageURL,
-        vae: vae,
-        vaeConfig: modelConfigs.vae,
-        targetHeight: request.height,
-        targetWidth: request.width
-      )
-      MLX.eval(context)
-      logger.info("Control image encoded, shape: \(context.shape)")
-      controlContext = context
-    }
+      if let controlImageURL = request.controlImage {
+        logger.info("Loading control image from \(controlImageURL.path)...")
+        let context = try loadControlImage(
+          url: controlImageURL,
+          vae: vae,
+          vaeConfig: modelConfigs.vae,
+          targetHeight: request.height,
+          targetWidth: request.width
+        )
+        MLX.eval(context)
+        logger.info("Control image encoded, shape: \(context.shape)")
+        controlContext = context
+      }
     #endif
     let vaeDivisor = modelConfigs.vae.latentDivisor
     let latentH = max(1, request.height / vaeDivisor)
@@ -965,14 +996,15 @@ public class ZImageControlPipeline {
       guard let transformer else {
         throw PipelineError.transformerNotLoaded
       }
-      for stepIndex in 0 ..< request.steps {
+      for stepIndex in 0..<request.steps {
         try Task.checkCancellation()
-        request.progressCallback?(ControlProgress(
-          stage: "Denoising",
-          stepIndex: stepIndex,
-          totalSteps: request.steps,
-          fractionCompleted: Double(stepIndex) / Double(request.steps)
-        ))
+        request.progressCallback?(
+          ControlProgress(
+            stage: "Denoising",
+            stepIndex: stepIndex,
+            totalSteps: request.steps,
+            fractionCompleted: Double(stepIndex) / Double(request.steps)
+          ))
         let timestep = timestepsArray[stepIndex]
         let normalizedTimestep = (1000.0 - timestep) / 1000.0
         let timestepArray = MLXArray([normalizedTimestep], [1])
@@ -992,8 +1024,8 @@ public class ZImageControlPipeline {
         let guidedNoise: MLXArray
         if doCFG, negativeEmbeds != nil {
           let batch = latents.dim(0)
-          let positive = noisePred[0 ..< batch, 0..., 0..., 0...]
-          let negative = noisePred[batch ..< batch * 2, 0..., 0..., 0...]
+          let positive = noisePred[0..<batch, 0..., 0..., 0...]
+          let negative = noisePred[batch..<batch * 2, 0..., 0..., 0...]
           guidedNoise = positive + request.guidanceScale * (positive - negative)
         } else {
           guidedNoise = noisePred
@@ -1004,30 +1036,32 @@ public class ZImageControlPipeline {
       transformer.clearCache()
     }
     unloadTransformer()
-    request.progressCallback?(ControlProgress(
-      stage: "Denoising",
-      stepIndex: request.steps,
-      totalSteps: request.steps,
-      fractionCompleted: 1.0
-    ))
-    request.progressCallback?(ControlProgress(
-      stage: "Decoding",
-      stepIndex: request.steps,
-      totalSteps: request.steps,
-      fractionCompleted: 1.0
-    ))
+    request.progressCallback?(
+      ControlProgress(
+        stage: "Denoising",
+        stepIndex: request.steps,
+        totalSteps: request.steps,
+        fractionCompleted: 1.0
+      ))
+    request.progressCallback?(
+      ControlProgress(
+        stage: "Decoding",
+        stepIndex: request.steps,
+        totalSteps: request.steps,
+        fractionCompleted: 1.0
+      ))
     logger.info("Denoising complete, decoding latents...")
     return PipelineUtilities.decodeLatents(latents, vae: vae, height: request.height, width: request.width)
   }
 
   #if canImport(CoreGraphics)
-  public func generateToMemory(_ request: ZImageControlGenerationRequest) async throws -> Data {
-    logger.info("Requested Z-Image control generation (to memory)")
-    let decoded = try await generateCore(request)
-    let imageData = try QwenImageIO.imageData(from: decoded)
-    logger.info("Generated image data (\(imageData.count) bytes)")
-    return imageData
-  }
+    public func generateToMemory(_ request: ZImageControlGenerationRequest) async throws -> Data {
+      logger.info("Requested Z-Image control generation (to memory)")
+      let decoded = try await generateCore(request)
+      let imageData = try QwenImageIO.imageData(from: decoded)
+      logger.info("Generated image data (\(imageData.count) bytes)")
+      return imageData
+    }
   #endif
 
   private struct ControlnetWeightsResult {
@@ -1044,20 +1078,22 @@ public class ZImageControlPipeline {
     let fm = FileManager.default
     let localURL = URL(fileURLWithPath: controlnetSpec)
     if fm.fileExists(atPath: localURL.path), controlnetSpec.hasSuffix(".safetensors") {
-      progressCallback?(ControlProgress(
-        stage: "Loading ControlNet",
-        stepIndex: 0, totalSteps: 0, fractionCompleted: 0
-      ))
+      progressCallback?(
+        ControlProgress(
+          stage: "Loading ControlNet",
+          stepIndex: 0, totalSteps: 0, fractionCompleted: 0
+        ))
       logger.info("Loading controlnet from local file: \(controlnetSpec)")
       let weights = try loadSafetensorsFile(url: localURL, dtype: dtype)
       return ControlnetWeightsResult(weights: weights, manifest: nil)
     }
     var isDirectory: ObjCBool = false
     if fm.fileExists(atPath: localURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
-      progressCallback?(ControlProgress(
-        stage: "Loading ControlNet",
-        stepIndex: 0, totalSteps: 0, fractionCompleted: 0
-      ))
+      progressCallback?(
+        ControlProgress(
+          stage: "Loading ControlNet",
+          stepIndex: 0, totalSteps: 0, fractionCompleted: 0
+        ))
       logger.info("Loading controlnet from local directory: \(controlnetSpec)")
       return try loadControlnetFromDirectory(localURL, dtype: dtype, preferredFile: preferredFile)
     }
@@ -1069,28 +1105,33 @@ public class ZImageControlPipeline {
         progressHandler: { [logger] progress in
           let percent = Int(progress.fractionCompleted * 100)
           logger.info("Downloading controlnet: \(percent)%")
-          progressCallback?(ControlProgress(
-            stage: "Downloading ControlNet",
-            stepIndex: 0,
-            totalSteps: 0,
-            fractionCompleted: progress.fractionCompleted
-          ))
+          progressCallback?(
+            ControlProgress(
+              stage: "Downloading ControlNet",
+              stepIndex: 0,
+              totalSteps: 0,
+              fractionCompleted: progress.fractionCompleted
+            ))
         }
       )
       return try loadControlnetFromDirectory(snapshot, dtype: dtype, preferredFile: preferredFile)
     }
-    throw PipelineError.weightsMissing("""
-    Invalid controlnet spec: \(controlnetSpec).
-     Provide a local .safetensors path, directory,
-    or HuggingFace model ID (e.g., alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1)
-    """)
+    throw PipelineError.weightsMissing(
+      """
+      Invalid controlnet spec: \(controlnetSpec).
+       Provide a local .safetensors path, directory,
+      or HuggingFace model ID (e.g., alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1)
+      """)
   }
 
-  private func loadControlnetFromDirectory(_ directory: URL, dtype: DType, preferredFile: String? = nil) throws -> ControlnetWeightsResult {
+  private func loadControlnetFromDirectory(_ directory: URL, dtype: DType, preferredFile: String? = nil) throws
+    -> ControlnetWeightsResult
+  {
     let fm = FileManager.default
     var manifest: ZImageQuantizationManifest? = nil
     if let loadedManifest = try ZImageQuantizer.loadControlnetManifest(from: directory) {
-      logger.info("Found quantized controlnet manifest: \(loadedManifest.bits)-bit, group_size=\(loadedManifest.groupSize)")
+      logger.info(
+        "Found quantized controlnet manifest: \(loadedManifest.bits)-bit, group_size=\(loadedManifest.groupSize)")
       manifest = loadedManifest
     }
     let contents = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
@@ -1098,7 +1139,8 @@ public class ZImageControlPipeline {
     if let preferredFile {
       safetensorsFiles = safetensorsFiles.filter { $0.lastPathComponent == preferredFile }
       if safetensorsFiles.isEmpty {
-        throw PipelineError.weightsMissing("Specified controlnet file '\(preferredFile)' not found in directory: \(directory.path)")
+        throw PipelineError.weightsMissing(
+          "Specified controlnet file '\(preferredFile)' not found in directory: \(directory.path)")
       }
       logger.info("Using specified controlnet file: \(preferredFile)")
     }
@@ -1117,7 +1159,8 @@ public class ZImageControlPipeline {
     return ControlnetWeightsResult(weights: allWeights, manifest: manifest)
   }
 
-  private func loadSafetensorsFile(url: URL, dtype: DType, preserveQuantized: Bool = false) throws -> [String: MLXArray] {
+  private func loadSafetensorsFile(url: URL, dtype: DType, preserveQuantized: Bool = false) throws -> [String: MLXArray]
+  {
     var tensors: [String: MLXArray] = [:]
     let reader = try SafeTensorsReader(fileURL: url)
     for meta in reader.allMetadata() {

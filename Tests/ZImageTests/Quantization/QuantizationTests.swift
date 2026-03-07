@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import ZImage
 
 final class QuantizationTests: XCTestCase {
@@ -33,12 +34,12 @@ final class QuantizationTests: XCTestCase {
 
   func testQuantizationSpecDecoding() throws {
     let json = """
-    {
-      "group_size": 128,
-      "bits": 4,
-      "mode": "mxfp4"
-    }
-    """
+      {
+        "group_size": 128,
+        "bits": 4,
+        "mode": "mxfp4"
+      }
+      """
 
     let data = json.data(using: .utf8)!
     let spec = try JSONDecoder().decode(ZImageQuantizationSpec.self, from: data)
@@ -75,23 +76,23 @@ final class QuantizationTests: XCTestCase {
 
   func testQuantizationManifestDecoding() throws {
     let json = """
-    {
-      "model_id": "Tongyi-MAI/Z-Image-Turbo",
-      "revision": "main",
-      "group_size": 32,
-      "bits": 8,
-      "mode": "affine",
-      "layers": [
-        {
-          "name": "transformer.layers.0.attn.q_proj",
-          "shape": [3840, 3840],
-          "in_dim": 3840,
-          "out_dim": 3840,
-          "file": "transformer/model.safetensors"
-        }
-      ]
-    }
-    """
+      {
+        "model_id": "Tongyi-MAI/Z-Image-Turbo",
+        "revision": "main",
+        "group_size": 32,
+        "bits": 8,
+        "mode": "affine",
+        "layers": [
+          {
+            "name": "transformer.layers.0.attn.q_proj",
+            "shape": [3840, 3840],
+            "in_dim": 3840,
+            "out_dim": 3840,
+            "file": "transformer/model.safetensors"
+          }
+        ]
+      }
+      """
 
     let data = json.data(using: .utf8)!
     let manifest = try JSONDecoder().decode(ZImageQuantizationManifest.self, from: data)
@@ -113,25 +114,25 @@ final class QuantizationTests: XCTestCase {
 
   func testQuantizationManifestLayerWithOverrides() throws {
     let json = """
-    {
-      "group_size": 32,
-      "bits": 8,
-      "mode": "affine",
-      "layers": [
-        {
-          "name": "transformer.layers.0.attn.q_proj",
-          "shape": [3840, 3840],
-          "in_dim": 3840,
-          "out_dim": 3840,
-          "file": "transformer/model.safetensors",
-          "quant_file": "transformer/model_quant.safetensors",
-          "group_size": 64,
-          "bits": 4,
-          "mode": "mxfp4"
-        }
-      ]
-    }
-    """
+      {
+        "group_size": 32,
+        "bits": 8,
+        "mode": "affine",
+        "layers": [
+          {
+            "name": "transformer.layers.0.attn.q_proj",
+            "shape": [3840, 3840],
+            "in_dim": 3840,
+            "out_dim": 3840,
+            "file": "transformer/model.safetensors",
+            "quant_file": "transformer/model_quant.safetensors",
+            "group_size": 64,
+            "bits": 4,
+            "mode": "mxfp4"
+          }
+        ]
+      }
+      """
 
     let data = json.data(using: .utf8)!
     let manifest = try JSONDecoder().decode(ZImageQuantizationManifest.self, from: data)
@@ -145,35 +146,35 @@ final class QuantizationTests: XCTestCase {
 
   func testQuantizationManifestMultipleLayers() throws {
     let json = """
-    {
-      "group_size": 32,
-      "bits": 8,
-      "mode": "affine",
-      "layers": [
-        {
-          "name": "transformer.layers.0.attn.q_proj",
-          "shape": [3840, 3840],
-          "in_dim": 3840,
-          "out_dim": 3840,
-          "file": "transformer/model-00001.safetensors"
-        },
-        {
-          "name": "transformer.layers.0.attn.k_proj",
-          "shape": [3840, 3840],
-          "in_dim": 3840,
-          "out_dim": 3840,
-          "file": "transformer/model-00001.safetensors"
-        },
-        {
-          "name": "transformer.layers.0.ff.linear1",
-          "shape": [10240, 3840],
-          "in_dim": 3840,
-          "out_dim": 10240,
-          "file": "transformer/model-00002.safetensors"
-        }
-      ]
-    }
-    """
+      {
+        "group_size": 32,
+        "bits": 8,
+        "mode": "affine",
+        "layers": [
+          {
+            "name": "transformer.layers.0.attn.q_proj",
+            "shape": [3840, 3840],
+            "in_dim": 3840,
+            "out_dim": 3840,
+            "file": "transformer/model-00001.safetensors"
+          },
+          {
+            "name": "transformer.layers.0.attn.k_proj",
+            "shape": [3840, 3840],
+            "in_dim": 3840,
+            "out_dim": 3840,
+            "file": "transformer/model-00001.safetensors"
+          },
+          {
+            "name": "transformer.layers.0.ff.linear1",
+            "shape": [10240, 3840],
+            "in_dim": 3840,
+            "out_dim": 10240,
+            "file": "transformer/model-00002.safetensors"
+          }
+        ]
+      }
+      """
 
     let data = json.data(using: .utf8)!
     let manifest = try JSONDecoder().decode(ZImageQuantizationManifest.self, from: data)
@@ -252,13 +253,13 @@ final class QuantizationTests: XCTestCase {
 
     let manifestURL = tempDir.appendingPathComponent("quantization.json")
     let manifest = """
-    {
-      "group_size": 32,
-      "bits": 8,
-      "mode": "affine",
-      "layers": []
-    }
-    """
+      {
+        "group_size": 32,
+        "bits": 8,
+        "mode": "affine",
+        "layers": []
+      }
+      """
     try manifest.write(to: manifestURL, atomically: true, encoding: .utf8)
 
     XCTAssertTrue(ZImageQuantizer.hasQuantization(at: tempDir))
@@ -269,7 +270,7 @@ final class QuantizationTests: XCTestCase {
   func testTransformerTensorNameTransform() {
     let path = "layers.0.attn.q_proj"
     let result = ZImageQuantizer.transformerTensorName(path)
-    XCTAssertEqual(result, path) // Should be unchanged
+    XCTAssertEqual(result, path)  // Should be unchanged
   }
 
   func testTextEncoderTensorNameTransformWithEncoder() {
@@ -281,7 +282,7 @@ final class QuantizationTests: XCTestCase {
   func testTextEncoderTensorNameTransformWithoutEncoder() {
     let path = "layers.0.self_attn.q_proj"
     let result = ZImageQuantizer.textEncoderTensorName(path)
-    XCTAssertEqual(result, path) // Should be unchanged
+    XCTAssertEqual(result, path)  // Should be unchanged
   }
 
   // MARK: - Manifest Load from File Tests
@@ -293,15 +294,15 @@ final class QuantizationTests: XCTestCase {
 
     let manifestURL = tempDir.appendingPathComponent("quantization.json")
     let manifestContent = """
-    {
-      "model_id": "test-model",
-      "revision": "v1.0",
-      "group_size": 64,
-      "bits": 4,
-      "mode": "mxfp4",
-      "layers": []
-    }
-    """
+      {
+        "model_id": "test-model",
+        "revision": "v1.0",
+        "group_size": 64,
+        "bits": 4,
+        "mode": "mxfp4",
+        "layers": []
+      }
+      """
     try manifestContent.write(to: manifestURL, atomically: true, encoding: .utf8)
 
     let manifest = try ZImageQuantizationManifest.load(from: manifestURL)

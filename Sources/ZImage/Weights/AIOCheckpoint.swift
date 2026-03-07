@@ -20,24 +20,31 @@ enum ZImageAIOCheckpoint {
       let reader = try SafeTensorsReader(fileURL: fileURL)
       return inspect(reader: reader)
     } catch {
-      return Inspection(isAIO: false, textEncoderPrefix: nil, diagnostics: ["failed to read safetensors header: \(error)"])
+      return Inspection(
+        isAIO: false, textEncoderPrefix: nil, diagnostics: ["failed to read safetensors header: \(error)"])
     }
   }
 
   static func inspect(reader: SafeTensorsReader) -> Inspection {
     let names = Set(reader.tensorNames)
 
-    let hasDiffusionModel = names.contains(where: { $0.hasPrefix("model.diffusion_model.") || $0.hasPrefix("diffusion_model.") })
+    let hasDiffusionModel = names.contains(where: {
+      $0.hasPrefix("model.diffusion_model.") || $0.hasPrefix("diffusion_model.")
+    })
     let textEncoderPrefix = findTextEncoderPrefix(in: names)
     let hasVAE = names.contains(where: { $0.hasPrefix("vae.") })
     let hasVAEDecoder = hasRecognizedVAEDecoder(in: names)
 
     var diagnostics: [String] = []
     if !hasDiffusionModel { diagnostics.append("missing transformer tensors (model.diffusion_model.*)") }
-    if textEncoderPrefix == nil { diagnostics.append("missing text encoder tensors (text_encoders.*.transformer.model.*)") }
+    if textEncoderPrefix == nil {
+      diagnostics.append("missing text encoder tensors (text_encoders.*.transformer.model.*)")
+    }
     if !hasVAE { diagnostics.append("missing VAE tensors (vae.*)") }
     if hasVAE && !hasVAEDecoder {
-      diagnostics.append("missing VAE decoder tensors (expected Diffusers `vae.decoder.mid_block.*`/`vae.decoder.up_blocks.*` or ComfyUI `vae.decoder.mid.*`/`vae.decoder.up.*`)")
+      diagnostics.append(
+        "missing VAE decoder tensors (expected Diffusers `vae.decoder.mid_block.*`/`vae.decoder.up_blocks.*` or ComfyUI `vae.decoder.mid.*`/`vae.decoder.up.*`)"
+      )
     }
 
     if let textEncoderPrefix {
@@ -46,7 +53,9 @@ enum ZImageAIOCheckpoint {
       }
     }
 
-    if !(names.contains("model.diffusion_model.cap_embedder.0.weight") || names.contains("diffusion_model.cap_embedder.0.weight")) {
+    if !(names.contains("model.diffusion_model.cap_embedder.0.weight")
+      || names.contains("diffusion_model.cap_embedder.0.weight"))
+    {
       diagnostics.append("missing transformer cap_embedder tensors")
     }
 
@@ -91,7 +100,9 @@ enum ZImageAIOCheckpoint {
       }
     }
 
-    logger?.info("Loaded AIO checkpoint components (transformer=\(transformer.count), text_encoder=\(textEncoder.count), vae=\(vae.count))")
+    logger?.info(
+      "Loaded AIO checkpoint components (transformer=\(transformer.count), text_encoder=\(textEncoder.count), vae=\(vae.count))"
+    )
     return Components(transformer: transformer, textEncoder: textEncoder, vae: vae)
   }
 
@@ -112,7 +123,8 @@ enum ZImageAIOCheckpoint {
     guard !weights.isEmpty else { return weights }
 
     let keys = weights.keys
-    let looksDiffusers = keys.contains(where: { $0.contains("decoder.mid_block.") || $0.contains("decoder.up_blocks.") })
+    let looksDiffusers = keys.contains(where: { $0.contains("decoder.mid_block.") || $0.contains("decoder.up_blocks.") }
+    )
     let looksComfy = keys.contains(where: {
       $0.hasPrefix("decoder.mid.attn_1.")
         || $0.hasPrefix("decoder.mid.block_")
@@ -137,7 +149,9 @@ enum ZImageAIOCheckpoint {
     }
 
     if looksComfy, !looksDiffusers {
-      logger?.info("Canonicalized ComfyUI VAE keys -> rewritten \(rewritten)/\(weights.count) tensors (upBlocks=\(upBlocks), squeezed=\(squeezed))")
+      logger?.info(
+        "Canonicalized ComfyUI VAE keys -> rewritten \(rewritten)/\(weights.count) tensors (upBlocks=\(upBlocks), squeezed=\(squeezed))"
+      )
     } else if squeezed > 0 {
       logger?.info("Canonicalized VAE decoder tensor shapes -> squeezed \(squeezed)/\(weights.count) tensors")
     }
@@ -160,13 +174,16 @@ enum ZImageAIOCheckpoint {
 
   private static func hasRecognizedVAEDecoder(in names: Set<String>) -> Bool {
     guard names.contains("vae.decoder.conv_in.weight"),
-          names.contains("vae.decoder.conv_out.weight") else { return false }
+      names.contains("vae.decoder.conv_out.weight")
+    else { return false }
 
     let hasDiffusersMid = names.contains(where: { $0.hasPrefix("vae.decoder.mid_block.") })
     let hasDiffusersUp = names.contains(where: { $0.hasPrefix("vae.decoder.up_blocks.") })
     if hasDiffusersMid && hasDiffusersUp { return true }
 
-    let hasComfyMid = names.contains(where: { $0.hasPrefix("vae.decoder.mid.attn_1.") || $0.hasPrefix("vae.decoder.mid.block_") })
+    let hasComfyMid = names.contains(where: {
+      $0.hasPrefix("vae.decoder.mid.attn_1.") || $0.hasPrefix("vae.decoder.mid.block_")
+    })
     let hasComfyUp = names.contains(where: { $0.hasPrefix("vae.decoder.up.") })
     return hasComfyMid && hasComfyUp
   }
@@ -179,9 +196,9 @@ enum ZImageAIOCheckpoint {
 
     let isProjectionWeight =
       key.hasSuffix(".to_q.weight")
-        || key.hasSuffix(".to_k.weight")
-        || key.hasSuffix(".to_v.weight")
-        || key.hasSuffix(".to_out.0.weight")
+      || key.hasSuffix(".to_k.weight")
+      || key.hasSuffix(".to_v.weight")
+      || key.hasSuffix(".to_out.0.weight")
     guard isProjectionWeight else { return tensor }
 
     guard tensor.ndim == 4 else { return tensor }

@@ -1,5 +1,6 @@
-import XCTest
 import MLX
+import XCTest
+
 @testable import ZImage
 
 final class LoRAIntegrationTests: XCTestCase {

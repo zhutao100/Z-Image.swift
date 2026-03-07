@@ -202,17 +202,18 @@ public struct ZImageQuantizer {
               quantizedWeights["\(base).biases"] = b
             }
 
-            quantizedLayers.append(.init(
-              name: "\(component).\(base)",
-              shape: [outDim, inDim],
-              inDim: inDim,
-              outDim: outDim,
-              file: "",
-              quantFile: nil,
-              groupSize: spec.groupSize,
-              bits: spec.bits,
-              mode: spec.mode.rawValue
-            ))
+            quantizedLayers.append(
+              .init(
+                name: "\(component).\(base)",
+                shape: [outDim, inDim],
+                inDim: inDim,
+                outDim: outDim,
+                file: "",
+                quantFile: nil,
+                groupSize: spec.groupSize,
+                bits: spec.bits,
+                mode: spec.mode.rawValue
+              ))
 
             quantizedCount += 1
           } else {
@@ -324,7 +325,8 @@ public struct ZImageQuantizer {
 
       let keys = Set(chunk.map { $0.0 })
       for i in 0..<layers.count {
-        let layerBase = layers[i].name.hasPrefix("\(component).")
+        let layerBase =
+          layers[i].name.hasPrefix("\(component).")
           ? String(layers[i].name.dropFirst("\(component).".count))
           : layers[i].name
         if keys.contains("\(layerBase).weight") {
@@ -413,32 +415,38 @@ public struct ZImageQuantizer {
 
     if let transformer = model as? ZImageTransformer2DModel {
       for (i, block) in transformer.layers.enumerated() {
-        quantizeBlock(block, prefix: "layers.\(i)", availableKeys: availableKeys,
-                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+        quantizeBlock(
+          block, prefix: "layers.\(i)", availableKeys: availableKeys,
+          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
       }
       for (i, block) in transformer.noiseRefiner.enumerated() {
-        quantizeBlock(block, prefix: "noise_refiner.\(i)", availableKeys: availableKeys,
-                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+        quantizeBlock(
+          block, prefix: "noise_refiner.\(i)", availableKeys: availableKeys,
+          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
       }
       for (i, block) in transformer.contextRefiner.enumerated() {
-        quantizeBlock(block, prefix: "context_refiner.\(i)", availableKeys: availableKeys,
-                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+        quantizeBlock(
+          block, prefix: "context_refiner.\(i)", availableKeys: availableKeys,
+          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
       }
       return
     }
 
     if let controlTransformer = model as? ZImageControlTransformer2DModel {
       for (i, block) in controlTransformer.layers.enumerated() {
-        quantizeBlock(block, prefix: "layers.\(i)", availableKeys: availableKeys,
-                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+        quantizeBlock(
+          block, prefix: "layers.\(i)", availableKeys: availableKeys,
+          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
       }
       for (i, block) in controlTransformer.noiseRefiner.enumerated() {
-        quantizeBlock(block, prefix: "noise_refiner.\(i)", availableKeys: availableKeys,
-                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+        quantizeBlock(
+          block, prefix: "noise_refiner.\(i)", availableKeys: availableKeys,
+          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
       }
       for (i, block) in controlTransformer.contextRefiner.enumerated() {
-        quantizeBlock(block, prefix: "context_refiner.\(i)", availableKeys: availableKeys,
-                      defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
+        quantizeBlock(
+          block, prefix: "context_refiner.\(i)", availableKeys: availableKeys,
+          defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: tensorNameTransform)
       }
       return
     }
@@ -624,17 +632,18 @@ public struct ZImageQuantizer {
             quantizedWeights["\(base).biases"] = b
           }
 
-          quantizedLayers.append(.init(
-            name: base,
-            shape: [outDim, inDim],
-            inDim: inDim,
-            outDim: outDim,
-            file: "model.safetensors",
-            quantFile: "model.safetensors",
-            groupSize: spec.groupSize,
-            bits: spec.bits,
-            mode: spec.mode.rawValue
-          ))
+          quantizedLayers.append(
+            .init(
+              name: base,
+              shape: [outDim, inDim],
+              inDim: inDim,
+              outDim: outDim,
+              file: "model.safetensors",
+              quantFile: "model.safetensors",
+              groupSize: spec.groupSize,
+              bits: spec.bits,
+              mode: spec.mode.rawValue
+            ))
 
           quantizedCount += 1
 
@@ -726,13 +735,15 @@ public struct ZImageQuantizer {
     let defaultSpec = (manifest.groupSize, manifest.bits, manifest.mode)
     for (i, block) in transformer.controlNoiseRefiner.enumerated() {
       let prefix = "control_noise_refiner.\(i)"
-      quantizeBlock(block, prefix: prefix, availableKeys: availableKeys,
-                    defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: controlnetTensorName)
+      quantizeBlock(
+        block, prefix: prefix, availableKeys: availableKeys,
+        defaultSpec: defaultSpec, manifest: manifest, tensorNameTransform: controlnetTensorName)
     }
     for (i, block) in transformer.controlLayers.enumerated() {
       let prefix = "control_layers.\(i)"
-      quantizeControlBlock(block, prefix: prefix, availableKeys: availableKeys,
-                           defaultSpec: defaultSpec, manifest: manifest)
+      quantizeControlBlock(
+        block, prefix: prefix, availableKeys: availableKeys,
+        defaultSpec: defaultSpec, manifest: manifest)
     }
   }
 

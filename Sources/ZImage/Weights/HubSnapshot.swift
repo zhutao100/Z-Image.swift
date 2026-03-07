@@ -23,7 +23,7 @@ public enum HubSnapshotError: Error, LocalizedError, Sendable {
 
   public var errorDescription: String? {
     switch self {
-    case let .fileNotFound(path):
+    case .fileNotFound(let path):
       return "File not found in snapshot: \(path)"
     }
   }
@@ -67,7 +67,8 @@ public struct HubSnapshotProgress: Sendable {
   public let estimatedSpeedBytesPerSecond: Double?
 
   init(progress: Progress, speed: Double?) {
-    fractionCompleted = progress.totalUnitCount > 0
+    fractionCompleted =
+      progress.totalUnitCount > 0
       ? Double(progress.completedUnitCount) / Double(progress.totalUnitCount)
       : 0
     completedUnitCount = progress.completedUnitCount
@@ -96,7 +97,7 @@ public actor HubSnapshot {
 
   public func prepare(progressHandler: ProgressHandler? = nil) async throws -> URL {
     if let cachedSnapshotURL,
-       FileManager.default.fileExists(atPath: cachedSnapshotURL.path)
+      FileManager.default.fileExists(atPath: cachedSnapshotURL.path)
     {
       return cachedSnapshotURL
     }

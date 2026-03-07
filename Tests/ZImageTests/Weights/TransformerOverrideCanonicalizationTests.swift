@@ -1,6 +1,7 @@
 import Logging
 import MLX
 import XCTest
+
 @testable import ZImage
 
 final class TransformerOverrideCanonicalizationTests: XCTestCase {
@@ -38,7 +39,7 @@ final class TransformerOverrideCanonicalizationTests: XCTestCase {
 
   func testQKVSplitUsesNormalizedKey() {
     let dim = 2
-    let values = (0 ..< (dim * 3 * dim)).map { Float($0) }
+    let values = (0..<(dim * 3 * dim)).map { Float($0) }
     let qkv = MLXArray(values, [dim * 3, dim])
     let input = ["model.diffusion_model.layers.0.attention.qkv.weight": qkv]
 

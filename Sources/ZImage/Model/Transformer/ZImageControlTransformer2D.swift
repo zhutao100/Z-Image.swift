@@ -80,7 +80,8 @@ public final class ZImageControlTransformer2DModel: Module {
   @ModuleInfo(key: "layers") public internal(set) var layers: [BaseZImageTransformerBlock]
 
   @ModuleInfo(key: "control_all_x_embedder") var controlAllXEmbedder: [String: Linear]
-  @ModuleInfo(key: "control_noise_refiner") public internal(set) var controlNoiseRefiner: [ZImageControlTransformerBlock]
+  @ModuleInfo(key: "control_noise_refiner") public internal(set) var controlNoiseRefiner:
+    [ZImageControlTransformerBlock]
   @ModuleInfo(key: "control_layers") public internal(set) var controlLayers: [ZImageControlTransformerBlock]
 
   var capEmbedNorm: RMSNorm
@@ -354,7 +355,8 @@ public final class ZImageControlTransformer2DModel: Module {
     let wTokens = width / patchSize
     let controlTokens = fTokens * hTokens * wTokens
 
-    var controlImage = controlContext
+    var controlImage =
+      controlContext
       .reshaped(batch, channels, fTokens, fPatchSize, hTokens, patchSize, wTokens, patchSize)
       .transposed(0, 2, 4, 6, 3, 5, 7, 1)
       .reshaped(batch, controlTokens, patchSize * patchSize * fPatchSize * channels)
@@ -372,10 +374,11 @@ public final class ZImageControlTransformer2DModel: Module {
     if let xPadToken, controlPad > 0 {
       let padDim = xPadToken.dim(xPadToken.ndim - 1)
       let controlSeqLen = controlTokens + controlPad
-      let padMask1d = MLX.concatenated([
-        MLX.zeros([controlTokens], dtype: .bool),
-        MLX.ones([controlPad], dtype: .bool)
-      ], axis: 0)
+      let padMask1d = MLX.concatenated(
+        [
+          MLX.zeros([controlTokens], dtype: .bool),
+          MLX.ones([controlPad], dtype: .bool),
+        ], axis: 0)
       let padMask = MLX.broadcast(padMask1d.reshaped(1, controlSeqLen), to: [batch, controlSeqLen])
       let pad = MLX.broadcast(xPadToken.reshaped(1, 1, padDim), to: [batch, controlSeqLen, padDim])
       controlEmbed = MLX.where(MLX.expandedDimensions(padMask, axis: 2), pad, controlEmbed)
@@ -495,7 +498,8 @@ public final class ZImageControlTransformer2DModel: Module {
       capFeat = MLX.where(MLX.expandedDimensions(capPadMask, axis: 2), pad, capFeat)
     }
 
-    var image = latentsWithFrame
+    var image =
+      latentsWithFrame
       .reshaped(batch, channels, cached.fTokens, fPatchSize, cached.hTokens, patchSize, cached.wTokens, patchSize)
       .transposed(0, 2, 4, 6, 3, 5, 7, 1)
       .reshaped(batch, cached.imageTokens, patchSize * patchSize * fPatchSize * channels)
@@ -575,7 +579,8 @@ public final class ZImageControlTransformer2DModel: Module {
     let projected = finalLayer(imageOut, conditioning: tEmb)
     let outChannels = configuration.inChannels
 
-    var reshaped = projected
+    var reshaped =
+      projected
       .reshaped(batch, cached.fTokens, cached.hTokens, cached.wTokens, fPatchSize, patchSize, patchSize, outChannels)
       .transposed(0, 7, 1, 4, 2, 5, 3, 6)
       .reshaped(batch, outChannels, cached.fTokens * fPatchSize, cached.hTokens * patchSize, cached.wTokens * patchSize)

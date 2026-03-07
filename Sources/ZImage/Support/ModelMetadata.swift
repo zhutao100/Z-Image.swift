@@ -14,8 +14,8 @@ public enum ZImageModelMetadata {
 
   public static let recommendedWidth = 1024
   public static let recommendedHeight = 1024
-  public static let recommendedInferenceSteps = 9 // gives 8 DiT forwards
-  public static let recommendedGuidanceScale: Float = 0.0 // Turbo is distilled for zero CFG
+  public static let recommendedInferenceSteps = 9  // gives 8 DiT forwards
+  public static let recommendedGuidanceScale: Float = 0.0  // Turbo is distilled for zero CFG
 
   public enum VAE {
     public static let latentChannels = 16

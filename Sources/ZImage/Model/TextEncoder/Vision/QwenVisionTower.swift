@@ -163,16 +163,24 @@ final class QwenVisionTower: Module {
       rotarySinSlices.append(rotary.sin)
 
       // Update cumulative lengths
-      let mergedPerFrame = (entry.height / configuration.spatialMergeSize) * (entry.width / configuration.spatialMergeSize)
+      let mergedPerFrame =
+        (entry.height / configuration.spatialMergeSize) * (entry.width / configuration.spatialMergeSize)
       var cumulativeWindow = cuWindowLengths.last ?? 0
-      for _ in 0..<entry.temporal { cumulativeWindow += mergedPerFrame; cuWindowLengths.append(cumulativeWindow) }
+      for _ in 0..<entry.temporal {
+        cumulativeWindow += mergedPerFrame
+        cuWindowLengths.append(cumulativeWindow)
+      }
 
       var cumulativeFull = cuFullLengths.last ?? 0
       let perFrame = entry.height * entry.width
-      for _ in 0..<entry.temporal { cumulativeFull += perFrame; cuFullLengths.append(cumulativeFull) }
+      for _ in 0..<entry.temporal {
+        cumulativeFull += perFrame
+        cuFullLengths.append(cumulativeFull)
+      }
 
       do {
-        let shifted = MLX.add(windowIndex.asType(.int32), MLXArray([Int32(llmCellBase)].map(Float32.init), [1]).asType(.int32))
+        let shifted = MLX.add(
+          windowIndex.asType(.int32), MLXArray([Int32(llmCellBase)].map(Float32.init), [1]).asType(.int32))
         let flat = shifted.asType(.int32)
         MLX.eval(flat)
         let vals = flat.asArray(Int32.self)

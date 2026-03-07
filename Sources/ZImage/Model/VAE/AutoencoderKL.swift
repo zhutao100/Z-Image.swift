@@ -273,7 +273,7 @@ private final class VAEMidBlock: Module {
     self._attentions.wrappedValue = addAttention ? [VAESelfAttention(channels: channels, normGroups: normGroups)] : []
     self._resnets.wrappedValue = [
       VAEResnetBlock2D(inChannels: channels, outChannels: channels, normGroups: normGroups),
-      VAEResnetBlock2D(inChannels: channels, outChannels: channels, normGroups: normGroups)
+      VAEResnetBlock2D(inChannels: channels, outChannels: channels, normGroups: normGroups),
     ]
     super.init()
   }

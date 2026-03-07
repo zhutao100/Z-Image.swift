@@ -86,16 +86,19 @@ public struct ZImageWeightsMapper {
 
   /// Load controlnet weights from a standalone safetensors file
   public func loadControlnetWeights(from path: String, dtype: DType? = .bfloat16) throws -> [String: MLXArray] {
-    let url: URL = if path.hasPrefix("/") {
-      URL(fileURLWithPath: path)
-    } else {
-      snapshot.appending(path: path)
-    }
+    let url: URL =
+      if path.hasPrefix("/") {
+        URL(fileURLWithPath: path)
+      } else {
+        snapshot.appending(path: path)
+      }
 
     guard FileManager.default.fileExists(atPath: url.path) else {
-      throw NSError(domain: "ZImageWeightsMapper", code: 1, userInfo: [
-        NSLocalizedDescriptionKey: "Controlnet weights file not found: \(url.path)",
-      ])
+      throw NSError(
+        domain: "ZImageWeightsMapper", code: 1,
+        userInfo: [
+          NSLocalizedDescriptionKey: "Controlnet weights file not found: \(url.path)"
+        ])
     }
 
     var tensors: [String: MLXArray] = [:]

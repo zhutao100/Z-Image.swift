@@ -1,5 +1,6 @@
 import MLX
 import XCTest
+
 @testable import ZImage
 
 /// Performance tests for Z-Image pipeline.
@@ -11,13 +12,14 @@ final class PerformanceTests: XCTestCase {
 
   /// Project root directory (derived from test file location)
   private static let projectRoot: URL = URL(fileURLWithPath: #file)
-    .deletingLastPathComponent() // Remove PerformanceTests.swift
-    .deletingLastPathComponent() // Remove ZImageIntegrationTests
-    .deletingLastPathComponent() // Remove Tests -> project root
+    .deletingLastPathComponent()  // Remove PerformanceTests.swift
+    .deletingLastPathComponent()  // Remove ZImageIntegrationTests
+    .deletingLastPathComponent()  // Remove Tests -> project root
 
   /// Output directory for test-generated images (inside project)
   private static let outputDir: URL = {
-    let url = projectRoot
+    let url =
+      projectRoot
       .appendingPathComponent("Tests")
       .appendingPathComponent("ZImageIntegrationTests")
       .appendingPathComponent("Resources")
@@ -80,12 +82,12 @@ final class PerformanceTests: XCTestCase {
 
   /// Baseline performance expectations (can be adjusted based on hardware)
   static let baselineMetrics = PerformanceMetrics(
-    totalInferenceTime: 60.0, // 60 seconds max for 9 steps at 1024x1024
+    totalInferenceTime: 60.0,  // 60 seconds max for 9 steps at 1024x1024
     textEncodingTime: 5.0,
     transformerTime: 50.0,
     perStepLatency: [],
     vaeDecodingTime: 5.0,
-    peakMemoryUsage: 15 * 1024 * 1024 * 1024, // 15 GB max (8-bit quantized model uses ~12-13GB)
+    peakMemoryUsage: 15 * 1024 * 1024 * 1024,  // 15 GB max (8-bit quantized model uses ~12-13GB)
     imagesPerSecond: 0
   )
 
@@ -108,7 +110,7 @@ final class PerformanceTests: XCTestCase {
     // Assert reasonable performance
     XCTAssertLessThan(
       metrics.totalInferenceTime,
-      Self.baselineMetrics.totalInferenceTime * 1.1, // Allow 10% variance
+      Self.baselineMetrics.totalInferenceTime * 1.1,  // Allow 10% variance
       "Total inference time exceeded baseline by more than 10%"
     )
   }
@@ -142,7 +144,7 @@ final class PerformanceTests: XCTestCase {
     // Generate multiple images and check memory doesn't leak
     var memoryReadings: [UInt64] = []
 
-    for i in 0 ..< 3 {
+    for i in 0..<3 {
       let metrics = try await measureGeneration(
         pipeline: pipeline,
         prompt: "memory test \(i)",
@@ -213,7 +215,7 @@ final class PerformanceTests: XCTestCase {
     metrics.vaeDecodingTime = metrics.totalInferenceTime * 0.10
 
     // Estimate per-step latency
-    metrics.perStepLatency = (0 ..< steps).map { _ in metrics.transformerTime / Double(steps) }
+    metrics.perStepLatency = (0..<steps).map { _ in metrics.transformerTime / Double(steps) }
 
     // Get memory usage
     metrics.peakMemoryUsage = getMemoryUsage()

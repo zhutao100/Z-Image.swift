@@ -80,9 +80,9 @@ public final class ZImageControlTransformerBlock: Module {
       let chunkSize = dim
 
       let attnScale = (1 + mod[0..., 0..<chunkSize])[.ellipsis, .newAxis, 0...]
-      let attnGate = MLX.tanh(mod[0..., chunkSize..<(2*chunkSize)])[.ellipsis, .newAxis, 0...]
-      let mlpScale = (1 + mod[0..., (2*chunkSize)..<(3*chunkSize)])[.ellipsis, .newAxis, 0...]
-      let mlpGate = MLX.tanh(mod[0..., (3*chunkSize)..<(4*chunkSize)])[.ellipsis, .newAxis, 0...]
+      let attnGate = MLX.tanh(mod[0..., chunkSize..<(2 * chunkSize)])[.ellipsis, .newAxis, 0...]
+      let mlpScale = (1 + mod[0..., (2 * chunkSize)..<(3 * chunkSize)])[.ellipsis, .newAxis, 0...]
+      let mlpGate = MLX.tanh(mod[0..., (3 * chunkSize)..<(4 * chunkSize)])[.ellipsis, .newAxis, 0...]
 
       let attnOut = attention(attentionNorm1(out) * attnScale, attnMask: attnMask, freqsCis: freqsCis)
       out = out + attnGate * attentionNorm2(attnOut)
@@ -218,9 +218,9 @@ public final class BaseZImageTransformerBlock: Module {
       let chunkSize = dim
 
       let attnScale = (1 + mod[0..., 0..<chunkSize])[.ellipsis, .newAxis, 0...]
-      let attnGate = MLX.tanh(mod[0..., chunkSize..<(2*chunkSize)])[.ellipsis, .newAxis, 0...]
-      let mlpScale = (1 + mod[0..., (2*chunkSize)..<(3*chunkSize)])[.ellipsis, .newAxis, 0...]
-      let mlpGate = MLX.tanh(mod[0..., (3*chunkSize)..<(4*chunkSize)])[.ellipsis, .newAxis, 0...]
+      let attnGate = MLX.tanh(mod[0..., chunkSize..<(2 * chunkSize)])[.ellipsis, .newAxis, 0...]
+      let mlpScale = (1 + mod[0..., (2 * chunkSize)..<(3 * chunkSize)])[.ellipsis, .newAxis, 0...]
+      let mlpGate = MLX.tanh(mod[0..., (3 * chunkSize)..<(4 * chunkSize)])[.ellipsis, .newAxis, 0...]
 
       let attnOut = attention(attentionNorm1(out) * attnScale, attnMask: attnMask, freqsCis: freqsCis)
       out = out + attnGate * attentionNorm2(attnOut)

@@ -1,6 +1,7 @@
 import Logging
 import MLX
 import XCTest
+
 @testable import ZImage
 
 /// Integration tests for ZImagePipeline using real model inference.
@@ -12,13 +13,14 @@ final class PipelineIntegrationTests: XCTestCase {
 
   /// Project root directory (derived from test file location)
   private static let projectRoot: URL = URL(fileURLWithPath: #file)
-    .deletingLastPathComponent() // Remove PipelineIntegrationTests.swift
-    .deletingLastPathComponent() // Remove ZImageIntegrationTests
-    .deletingLastPathComponent() // Remove Tests -> project root
+    .deletingLastPathComponent()  // Remove PipelineIntegrationTests.swift
+    .deletingLastPathComponent()  // Remove ZImageIntegrationTests
+    .deletingLastPathComponent()  // Remove Tests -> project root
 
   /// Output directory for test-generated images (inside project)
   private static let outputDir: URL = {
-    let url = projectRoot
+    let url =
+      projectRoot
       .appendingPathComponent("Tests")
       .appendingPathComponent("ZImageIntegrationTests")
       .appendingPathComponent("Resources")
@@ -75,7 +77,7 @@ final class PipelineIntegrationTests: XCTestCase {
 
     // Verify it's a valid image
     let imageData = try Data(contentsOf: outputURL)
-    XCTAssertGreaterThan(imageData.count, 1000) // Should be a reasonable image size
+    XCTAssertGreaterThan(imageData.count, 1000)  // Should be a reasonable image size
   }
 
   func testDeterministicSeed() async throws {
@@ -152,13 +154,13 @@ final class PipelineIntegrationTests: XCTestCase {
 
     // Create a long detailed prompt
     let longPrompt = """
-    A highly detailed digital painting of a majestic castle perched on a cliff overlooking a vast ocean,
-    with dramatic storm clouds gathering in the sky, lightning striking in the distance, waves crashing
-    against the rocky shore below, medieval architecture with tall spires and flying buttresses,
-    surrounded by lush green forests and winding paths, birds flying in formation, a full moon
-    partially visible through the clouds, atmospheric perspective creating depth, cinematic lighting,
-    4k resolution, trending on artstation, masterpiece quality
-    """
+      A highly detailed digital painting of a majestic castle perched on a cliff overlooking a vast ocean,
+      with dramatic storm clouds gathering in the sky, lightning striking in the distance, waves crashing
+      against the rocky shore below, medieval architecture with tall spires and flying buttresses,
+      surrounded by lush green forests and winding paths, birds flying in formation, a full moon
+      partially visible through the clouds, atmospheric perspective creating depth, cinematic lighting,
+      4k resolution, trending on artstation, masterpiece quality
+      """
 
     let request = ZImageGenerationRequest(
       prompt: longPrompt,
@@ -228,7 +230,8 @@ final class PipelineIntegrationTests: XCTestCase {
       )
     )
     let textEncoderWeights = try weightsMapper.loadTextEncoder()
-    ZImageWeightsMapping.applyTextEncoder(weights: textEncoderWeights, to: textEncoder, manifest: quantManifest, logger: logger)
+    ZImageWeightsMapping.applyTextEncoder(
+      weights: textEncoderWeights, to: textEncoder, manifest: quantManifest, logger: logger)
 
     let originalPrompt = "a cat"
     let config = PromptEnhanceConfig(

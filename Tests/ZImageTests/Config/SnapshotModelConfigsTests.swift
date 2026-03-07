@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import ZImage
 
 final class SnapshotModelConfigsTests: XCTestCase {

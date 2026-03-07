@@ -170,23 +170,27 @@ public final class ZImagePipeline {
   }
 
   private func loadVAEDecoder(snapshot _: URL, config: ZImageVAEConfig) throws -> AutoencoderDecoderOnly {
-    AutoencoderDecoderOnly(configuration: .init(
-      inChannels: config.inChannels,
-      outChannels: config.outChannels,
-      latentChannels: config.latentChannels,
-      scalingFactor: config.scalingFactor,
-      shiftFactor: config.shiftFactor,
-      blockOutChannels: config.blockOutChannels,
-      layersPerBlock: config.layersPerBlock,
-      normNumGroups: config.normNumGroups,
-      sampleSize: config.sampleSize,
-      midBlockAddAttention: config.midBlockAddAttention
-    ))
+    AutoencoderDecoderOnly(
+      configuration: .init(
+        inChannels: config.inChannels,
+        outChannels: config.outChannels,
+        latentChannels: config.latentChannels,
+        scalingFactor: config.scalingFactor,
+        shiftFactor: config.shiftFactor,
+        blockOutChannels: config.blockOutChannels,
+        layersPerBlock: config.layersPerBlock,
+        normNumGroups: config.normNumGroups,
+        sampleSize: config.sampleSize,
+        midBlockAddAttention: config.midBlockAddAttention
+      ))
   }
 
-  private func encodePrompt(_ prompt: String, tokenizer: QwenTokenizer, textEncoder: QwenTextEncoder, maxLength: Int) throws -> (MLXArray, MLXArray) {
+  private func encodePrompt(_ prompt: String, tokenizer: QwenTokenizer, textEncoder: QwenTextEncoder, maxLength: Int)
+    throws -> (MLXArray, MLXArray)
+  {
     do {
-      let result = try PipelineUtilities.encodePrompt(prompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: maxLength)
+      let result = try PipelineUtilities.encodePrompt(
+        prompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: maxLength)
       return (result.embeddings, result.mask)
     } catch {
       throw PipelineError.textEncoderNotLoaded
@@ -201,7 +205,9 @@ public final class ZImagePipeline {
   }
 
   func resolveModelSelection(_ modelSpec: String?, forceTransformerOverrideOnly: Bool) -> ModelSelection {
-    guard let modelSpec else { return .init(baseModelSpec: nil, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil) }
+    guard let modelSpec else {
+      return .init(baseModelSpec: nil, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
+    }
 
     let candidateURL = URL(fileURLWithPath: modelSpec)
     var isDir: ObjCBool = false
@@ -215,19 +221,28 @@ public final class ZImagePipeline {
           ZImageFiles.textEncoderConfig,
           ZImageFiles.vaeConfig,
         ]
-        let hasStructure = required.allSatisfy { FileManager.default.fileExists(atPath: candidateURL.appending(path: $0).path) }
+        let hasStructure = required.allSatisfy {
+          FileManager.default.fileExists(atPath: candidateURL.appending(path: $0).path)
+        }
         if hasStructure {
-          return .init(baseModelSpec: modelSpec, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
+          return .init(
+            baseModelSpec: modelSpec, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
         }
 
-        let contents = (try? FileManager.default.contentsOfDirectory(at: candidateURL, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        let contents =
+          (try? FileManager.default.contentsOfDirectory(at: candidateURL, includingPropertiesForKeys: [.fileSizeKey]))
+          ?? []
         let safes = contents.filter { $0.pathExtension == "safetensors" }
         if safes.isEmpty {
-          logger.warning("Model path is a directory without expected configs or safetensors: \(modelSpec). Falling back to default model.")
-          return .init(baseModelSpec: nil, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
+          logger.warning(
+            "Model path is a directory without expected configs or safetensors: \(modelSpec). Falling back to default model."
+          )
+          return .init(
+            baseModelSpec: nil, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
         }
 
-        let preferred = safes.first(where: { $0.lastPathComponent.lowercased().contains("v2") })
+        let preferred =
+          safes.first(where: { $0.lastPathComponent.lowercased().contains("v2") })
           ?? safes.max(by: { a, b in
             let sa = (try? a.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             let sb = (try? b.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
@@ -235,15 +250,19 @@ public final class ZImagePipeline {
           })
 
         guard let preferred else {
-          return .init(baseModelSpec: nil, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
+          return .init(
+            baseModelSpec: nil, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
         }
-        return resolveLocalSafetensors(preferred, forceTransformerOverrideOnly: forceTransformerOverrideOnly, sourceDirectory: candidateURL)
+        return resolveLocalSafetensors(
+          preferred, forceTransformerOverrideOnly: forceTransformerOverrideOnly, sourceDirectory: candidateURL)
       }
 
-      return .init(baseModelSpec: modelSpec, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
+      return .init(
+        baseModelSpec: modelSpec, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
     }
 
-    return .init(baseModelSpec: modelSpec, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
+    return .init(
+      baseModelSpec: modelSpec, transformerOverrideURL: nil, aioCheckpointURL: nil, aioTextEncoderPrefix: nil)
   }
 
   private func resolveLocalSafetensors(
@@ -255,11 +274,14 @@ public final class ZImagePipeline {
       let inspection = ZImageAIOCheckpoint.inspect(fileURL: url)
       if inspection.isAIO, let prefix = inspection.textEncoderPrefix {
         if let sourceDirectory {
-          logger.info("Detected AIO checkpoint in \(sourceDirectory.lastPathComponent): \(url.lastPathComponent). Bypassing base model weights.")
+          logger.info(
+            "Detected AIO checkpoint in \(sourceDirectory.lastPathComponent): \(url.lastPathComponent). Bypassing base model weights."
+          )
         } else {
           logger.info("Detected AIO checkpoint: \(url.lastPathComponent). Bypassing base model weights.")
         }
-        return .init(baseModelSpec: nil, transformerOverrideURL: nil, aioCheckpointURL: url, aioTextEncoderPrefix: prefix)
+        return .init(
+          baseModelSpec: nil, transformerOverrideURL: nil, aioCheckpointURL: url, aioTextEncoderPrefix: prefix)
       }
     }
 
@@ -274,11 +296,14 @@ public final class ZImagePipeline {
   private func applyTransformerOverrideIfNeeded(_ overrideURL: URL?) throws {
     guard overrideURL != activeTransformerOverrideURL else { return }
     guard activeAIOCheckpointURL == nil else { return }
-    guard let transformer, let snapshot = modelSnapshot, let configs = modelConfigs else { throw PipelineError.modelNotLoaded }
+    guard let transformer, let snapshot = modelSnapshot, let configs = modelConfigs else {
+      throw PipelineError.modelNotLoaded
+    }
 
     let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
     let baseTransformerWeights = try weightsMapper.loadTransformer()
-    ZImageWeightsMapping.applyTransformer(weights: baseTransformerWeights, to: transformer, manifest: nil, logger: logger)
+    ZImageWeightsMapping.applyTransformer(
+      weights: baseTransformerWeights, to: transformer, manifest: nil, logger: logger)
 
     activeTransformerOverrideURL = nil
 
@@ -286,11 +311,15 @@ public final class ZImagePipeline {
       logger.info("Applying transformer override weights from: \(overrideURL.lastPathComponent)")
       var overrideWeights = try weightsMapper.loadTransformer(fromFile: overrideURL, dtype: .bfloat16)
 
-      if let inferredDim = ZImageTransformerOverride.inferDim(from: overrideWeights), inferredDim != configs.transformer.dim {
-        throw PipelineError.weightsMissing("Transformer override dim \(inferredDim) mismatches model dim \(configs.transformer.dim)")
+      if let inferredDim = ZImageTransformerOverride.inferDim(from: overrideWeights),
+        inferredDim != configs.transformer.dim
+      {
+        throw PipelineError.weightsMissing(
+          "Transformer override dim \(inferredDim) mismatches model dim \(configs.transformer.dim)")
       }
 
-      overrideWeights = ZImageTransformerOverride.canonicalize(overrideWeights, dim: configs.transformer.dim, logger: logger)
+      overrideWeights = ZImageTransformerOverride.canonicalize(
+        overrideWeights, dim: configs.transformer.dim, logger: logger)
       ZImageWeightsMapping.applyTransformer(weights: overrideWeights, to: transformer, manifest: nil, logger: logger)
       activeTransformerOverrideURL = overrideURL
     }
@@ -335,24 +364,28 @@ public final class ZImagePipeline {
     let modelId = modelSpec ?? ZImageRepository.id
     let normalizedAIOPath = aioCheckpointURL?.standardizedFileURL.path
     let currentAIOPath = activeAIOCheckpointURL?.standardizedFileURL.path
-    let hasLoadedComponents = tokenizer != nil && textEncoder != nil && transformer != nil && vae != nil && modelConfigs != nil && modelSnapshot != nil
+    let hasLoadedComponents =
+      tokenizer != nil && textEncoder != nil && transformer != nil && vae != nil && modelConfigs != nil
+      && modelSnapshot != nil
     if isModelLoaded,
-       loadedModelId == modelId,
-       loadedWeightsVariant == normalizedWeightsVariant,
-       normalizedAIOPath == currentAIOPath,
-       hasLoadedComponents
+      loadedModelId == modelId,
+      loadedWeightsVariant == normalizedWeightsVariant,
+      normalizedAIOPath == currentAIOPath,
+      hasLoadedComponents
     {
       logger.info("Model already loaded, skipping load")
       return
     }
-    let canPreserveSharedComponents = isModelLoaded
+    let canPreserveSharedComponents =
+      isModelLoaded
       && loadedModelId != modelId
       && currentAIOPath == nil
       && normalizedAIOPath == nil
       && loadedWeightsVariant == normalizedWeightsVariant
       && areZImageVariants(loadedModelId ?? "", modelId)
     if isModelLoaded,
-       loadedModelId != modelId || normalizedAIOPath != currentAIOPath || loadedWeightsVariant != normalizedWeightsVariant
+      loadedModelId != modelId || normalizedAIOPath != currentAIOPath
+        || loadedWeightsVariant != normalizedWeightsVariant
     {
       if canPreserveSharedComponents {
         logger.info("Switching Z-Image variant, preserving VAE and tokenizer")
@@ -371,17 +404,23 @@ public final class ZImagePipeline {
     logger.info("Loading model: \(modelId)")
     progressHandler?(GenerationProgress(stage: .loadingModel, stepIndex: 0, totalSteps: 1))
 
-    let snapshotFilePatterns: [String]? = aioCheckpointURL == nil ? nil : PipelineSnapshot.configAndTokenizerFilePatterns
+    let snapshotFilePatterns: [String]? =
+      aioCheckpointURL == nil ? nil : PipelineSnapshot.configAndTokenizerFilePatterns
     let shouldValidateWeightsForCache = snapshotFilePatterns == nil
-    let snapshotValidator: (@Sendable (URL) -> Bool)? = if shouldValidateWeightsForCache, let normalizedWeightsVariant {
-      { [logger] snapshot in
-        !ZImageFiles.resolveTransformerWeights(at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger).isEmpty
-          && !ZImageFiles.resolveTextEncoderWeights(at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger).isEmpty
-          && !ZImageFiles.resolveVAEWeights(at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger).isEmpty
+    let snapshotValidator: (@Sendable (URL) -> Bool)? =
+      if shouldValidateWeightsForCache, let normalizedWeightsVariant {
+        { [logger] snapshot in
+          !ZImageFiles.resolveTransformerWeights(at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
+            .isEmpty
+            && !ZImageFiles.resolveTextEncoderWeights(
+              at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger
+            ).isEmpty
+            && !ZImageFiles.resolveVAEWeights(at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
+              .isEmpty
+        }
+      } else {
+        nil
       }
-    } else {
-      nil
-    }
 
     let snapshot = try await PipelineSnapshot.prepare(
       model: modelSpec,
@@ -406,13 +445,16 @@ public final class ZImagePipeline {
         let inspection = ZImageAIOCheckpoint.inspect(fileURL: aioCheckpointURL)
         guard inspection.isAIO, let inferred = inspection.textEncoderPrefix else {
           let reason = inspection.diagnostics.isEmpty ? "unknown" : inspection.diagnostics.joined(separator: "; ")
-          throw PipelineError.weightsMissing("Not a valid AIO checkpoint: \(aioCheckpointURL.lastPathComponent) (\(reason)). Use --force-transformer-override-only to treat it as transformer-only.")
+          throw PipelineError.weightsMissing(
+            "Not a valid AIO checkpoint: \(aioCheckpointURL.lastPathComponent) (\(reason)). Use --force-transformer-override-only to treat it as transformer-only."
+          )
         }
         textEncoderPrefix = inferred
       }
 
       logger.info("Loading AIO checkpoint weights from \(aioCheckpointURL.lastPathComponent)")
-      let aio = try ZImageAIOCheckpoint.loadComponents(from: aioCheckpointURL, textEncoderPrefix: textEncoderPrefix, dtype: .bfloat16, logger: logger)
+      let aio = try ZImageAIOCheckpoint.loadComponents(
+        from: aioCheckpointURL, textEncoderPrefix: textEncoderPrefix, dtype: .bfloat16, logger: logger)
 
       logger.info("Loading text encoder...")
       let te = try loadTextEncoder(snapshot: snapshot, config: configs.textEncoder)
@@ -422,12 +464,17 @@ public final class ZImagePipeline {
       progressHandler?(GenerationProgress(stage: .loadingTransformer, stepIndex: 0, totalSteps: 1))
       logger.info("Loading transformer...")
       let trans = try loadTransformer(snapshot: snapshot, config: configs.transformer)
-      var transformerWeights = ZImageTransformerOverride.canonicalize(aio.transformer, dim: configs.transformer.dim, logger: logger)
-      if let inferredDim = ZImageTransformerOverride.inferDim(from: transformerWeights), inferredDim != configs.transformer.dim {
-        throw PipelineError.weightsMissing("AIO transformer dim \(inferredDim) mismatches model dim \(configs.transformer.dim)")
+      var transformerWeights = ZImageTransformerOverride.canonicalize(
+        aio.transformer, dim: configs.transformer.dim, logger: logger)
+      if let inferredDim = ZImageTransformerOverride.inferDim(from: transformerWeights),
+        inferredDim != configs.transformer.dim
+      {
+        throw PipelineError.weightsMissing(
+          "AIO transformer dim \(inferredDim) mismatches model dim \(configs.transformer.dim)")
       }
 
-      let missingStrictKeys = ZImageAIOTransformerValidation.missingStrictRequiredKeys(in: transformerWeights, config: configs.transformer)
+      let missingStrictKeys = ZImageAIOTransformerValidation.missingStrictRequiredKeys(
+        in: transformerWeights, config: configs.transformer)
       if !missingStrictKeys.isEmpty {
         throw PipelineError.weightsMissing(
           """
@@ -450,12 +497,13 @@ public final class ZImagePipeline {
         let percent = Int((coverage * 100.0).rounded())
         let missingSample = audit.missing.prefix(10).joined(separator: ", ")
         let suffix = audit.missing.count > 10 ? ", ..." : ""
-        throw PipelineError.weightsMissing("""
-        AIO transformer weights coverage too low:
-         matched \(audit.matched)/\(total) (\(percent)%).
-         Missing (sample): \(missingSample)\(suffix).
-         Use --force-transformer-override-only to treat it as transformer-only.
-        """)
+        throw PipelineError.weightsMissing(
+          """
+          AIO transformer weights coverage too low:
+           matched \(audit.matched)/\(total) (\(percent)%).
+           Missing (sample): \(missingSample)\(suffix).
+           Use --force-transformer-override-only to treat it as transformer-only.
+          """)
       }
       ZImageWeightsMapping.applyTransformer(weights: transformerWeights, to: trans, manifest: nil, logger: logger)
       transformer = trans
@@ -491,18 +539,24 @@ public final class ZImagePipeline {
         } else {
           let percent = Int((coverage * 100.0).rounded())
           if mismatches.isEmpty {
-            logger.warning("AIO VAE decoder weights coverage too low: matched \(audit.matched)/\(total) (\(percent)%). Falling back to base VAE weights.")
+            logger.warning(
+              "AIO VAE decoder weights coverage too low: matched \(audit.matched)/\(total) (\(percent)%). Falling back to base VAE weights."
+            )
           } else {
-            logger.warning("AIO VAE decoder weights have incompatible shapes (coverage \(percent)%), falling back to base VAE weights.")
+            logger.warning(
+              "AIO VAE decoder weights have incompatible shapes (coverage \(percent)%), falling back to base VAE weights."
+            )
           }
 
-          let vaeSnapshotValidator: (@Sendable (URL) -> Bool)? = if let normalizedWeightsVariant {
-            { [logger] snapshot in
-              !ZImageFiles.resolveVAEWeights(at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger).isEmpty
+          let vaeSnapshotValidator: (@Sendable (URL) -> Bool)? =
+            if let normalizedWeightsVariant {
+              { [logger] snapshot in
+                !ZImageFiles.resolveVAEWeights(at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
+                  .isEmpty
+              }
+            } else {
+              nil
             }
-          } else {
-            nil
-          }
           let baseVAESnapshot = try await PipelineSnapshot.prepare(
             model: modelSpec,
             weightsVariant: normalizedWeightsVariant,
@@ -511,7 +565,8 @@ public final class ZImagePipeline {
             logger: logger
           )
           if let normalizedWeightsVariant,
-             ZImageFiles.resolveVAEWeights(at: baseVAESnapshot, weightsVariant: normalizedWeightsVariant, logger: logger).isEmpty
+            ZImageFiles.resolveVAEWeights(at: baseVAESnapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
+              .isEmpty
           {
             throw ZImageFiles.WeightsVariantError.missingRequiredComponentWeights(
               weightsVariant: normalizedWeightsVariant,
@@ -519,7 +574,8 @@ public final class ZImagePipeline {
               snapshot: baseVAESnapshot
             )
           }
-          let weightsMapper = ZImageWeightsMapper(snapshot: baseVAESnapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
+          let weightsMapper = ZImageWeightsMapper(
+            snapshot: baseVAESnapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
           let baseVAEWeights = try weightsMapper.loadVAE()
           let baseDecoderWeights = baseVAEWeights.filter { $0.key.hasPrefix("decoder.") }
           ZImageWeightsMapping.applyVAE(weights: baseDecoderWeights, to: v, manifest: nil, logger: logger)
@@ -529,10 +585,12 @@ public final class ZImagePipeline {
         logger.info("Reusing cached VAE")
       }
     } else {
-      let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
+      let weightsMapper = ZImageWeightsMapper(
+        snapshot: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
       let manifest = weightsMapper.loadQuantizationManifest()
       if manifest == nil {
-        try ZImageFiles.validateRequiredComponentWeights(at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
+        try ZImageFiles.validateRequiredComponentWeights(
+          at: snapshot, weightsVariant: normalizedWeightsVariant, logger: logger)
       }
 
       if let m = manifest {
@@ -612,7 +670,8 @@ public final class ZImagePipeline {
     currentLoRAConfig
   }
 
-  public func generate(_ request: ZImageGenerationRequest, progressHandler: ProgressHandler? = nil) async throws -> URL {
+  public func generate(_ request: ZImageGenerationRequest, progressHandler: ProgressHandler? = nil) async throws -> URL
+  {
     logger.info("Requested Z-Image generation")
 
     let decoded = try await generateCore(request, progressHandler: progressHandler)
@@ -624,7 +683,9 @@ public final class ZImagePipeline {
     return request.outputPath
   }
 
-  public func generateToMemory(_ request: ZImageGenerationRequest, progressHandler: ProgressHandler? = nil) async throws -> Data {
+  public func generateToMemory(_ request: ZImageGenerationRequest, progressHandler: ProgressHandler? = nil) async throws
+    -> Data
+  {
     logger.info("Requested Z-Image generation (to memory)")
 
     let decoded = try await generateCore(request, progressHandler: progressHandler)
@@ -636,15 +697,20 @@ public final class ZImagePipeline {
     return imageData
   }
 
-  private func generateCore(_ request: ZImageGenerationRequest, progressHandler: ProgressHandler? = nil) async throws -> MLXArray {
+  private func generateCore(_ request: ZImageGenerationRequest, progressHandler: ProgressHandler? = nil) async throws
+    -> MLXArray
+  {
     let vaeScale = 16
     if request.width % vaeScale != 0 {
-      throw PipelineError.invalidDimensions("Width must be divisible by \(vaeScale) (got \(request.width)). Please adjust to a multiple of \(vaeScale).")
+      throw PipelineError.invalidDimensions(
+        "Width must be divisible by \(vaeScale) (got \(request.width)). Please adjust to a multiple of \(vaeScale).")
     }
     if request.height % vaeScale != 0 {
-      throw PipelineError.invalidDimensions("Height must be divisible by \(vaeScale) (got \(request.height)). Please adjust to a multiple of \(vaeScale).")
+      throw PipelineError.invalidDimensions(
+        "Height must be divisible by \(vaeScale) (got \(request.height)). Please adjust to a multiple of \(vaeScale).")
     }
-    let selection = resolveModelSelection(request.model, forceTransformerOverrideOnly: request.forceTransformerOverrideOnly)
+    let selection = resolveModelSelection(
+      request.model, forceTransformerOverrideOnly: request.forceTransformerOverrideOnly)
     try await loadModel(
       modelSpec: selection.baseModelSpec,
       weightsVariant: request.weightsVariant,
@@ -654,7 +720,7 @@ public final class ZImagePipeline {
     )
 
     guard let vae,
-          let modelConfigs
+      let modelConfigs
     else {
       throw PipelineError.modelNotLoaded
     }
@@ -698,11 +764,14 @@ public final class ZImagePipeline {
         GPU.clearCache()
       }
 
-      let (pe, _) = try encodePrompt(finalPrompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: request.maxSequenceLength)
+      let (pe, _) = try encodePrompt(
+        finalPrompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: request.maxSequenceLength)
       promptEmbeds = pe
 
       if doCFG {
-        let (ne, _) = try encodePrompt(request.negativePrompt ?? "", tokenizer: tokenizer, textEncoder: textEncoder, maxLength: request.maxSequenceLength)
+        let (ne, _) = try encodePrompt(
+          request.negativePrompt ?? "", tokenizer: tokenizer, textEncoder: textEncoder,
+          maxLength: request.maxSequenceLength)
         negativeEmbeds = ne
         MLX.eval(promptEmbeds, ne)
       } else {
@@ -742,7 +811,7 @@ public final class ZImagePipeline {
       guard let transformer else {
         throw PipelineError.transformerNotLoaded
       }
-      for stepIndex in 0 ..< request.steps {
+      for stepIndex in 0..<request.steps {
         try Task.checkCancellation()
         progressHandler?(GenerationProgress(stage: .denoising, stepIndex: stepIndex, totalSteps: request.steps))
         let timestep = timestepsArray[stepIndex]
@@ -760,8 +829,8 @@ public final class ZImagePipeline {
         let guidedNoise: MLXArray
         if doCFG, negativeEmbeds != nil {
           let batch = latents.dim(0)
-          let positive = noisePred[0 ..< batch, 0..., 0..., 0...]
-          let negative = noisePred[batch ..< batch * 2, 0..., 0..., 0...]
+          let positive = noisePred[0..<batch, 0..., 0..., 0...]
+          let negative = noisePred[batch..<batch * 2, 0..., 0..., 0...]
           guidedNoise = positive + request.guidanceScale * (positive - negative)
         } else {
           guidedNoise = noisePred

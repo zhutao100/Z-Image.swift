@@ -1,5 +1,6 @@
-import XCTest
 import MLX
+import XCTest
+
 @testable import ZImage
 
 final class SafeTensorsReaderTests: XCTestCase {
@@ -108,7 +109,7 @@ final class SafeTensorsReaderTests: XCTestCase {
       byteCount: 10 * 20 * 30 * 4
     )
 
-    XCTAssertEqual(metadata.elementCount, 6000) // 10 * 20 * 30
+    XCTAssertEqual(metadata.elementCount, 6000)  // 10 * 20 * 30
   }
 
   func testSafeTensorMetadataEmptyShape() {
@@ -120,7 +121,7 @@ final class SafeTensorsReaderTests: XCTestCase {
       byteCount: 4
     )
 
-    XCTAssertEqual(metadata.elementCount, 1) // Empty product is 1
+    XCTAssertEqual(metadata.elementCount, 1)  // Empty product is 1
   }
 
   func testSafeTensorMetadata1D() {
@@ -157,7 +158,7 @@ final class SafeTensorsReaderTests: XCTestCase {
       (.uint64, 8),
       (.uint16, 2),
       (.uint8, 1),
-      (.bool, 1)
+      (.bool, 1),
     ]
 
     for (dtype, expectedSize) in dtypeSizes {
@@ -222,7 +223,7 @@ final class SafeTensorsReaderTests: XCTestCase {
 
     let arrays: [String: MLXArray] = [
       "weight": tensor1,
-      "bias": tensor2
+      "bias": tensor2,
     ]
 
     // Save using MLX
@@ -277,7 +278,7 @@ final class SafeTensorsReaderTests: XCTestCase {
     let arrays: [String: MLXArray] = [
       "layer1.weight": MLXArray(w1, [2]).asType(.bfloat16),
       "layer1.bias": MLXArray(b1, [1]).asType(.bfloat16),
-      "layer2.weight": MLXArray(w2, [2, 2]).asType(.bfloat16)
+      "layer2.weight": MLXArray(w2, [2, 2]).asType(.bfloat16),
     ]
 
     try MLX.save(arrays: arrays, metadata: [:], url: fileURL)
@@ -342,7 +343,7 @@ final class SafeTensorsReaderTests: XCTestCase {
     let bValues: [Float] = [3.0]
     let arrays: [String: MLXArray] = [
       "a": MLXArray(aValues, [2]).asType(.bfloat16),
-      "b": MLXArray(bValues, [1]).asType(.bfloat16)
+      "b": MLXArray(bValues, [1]).asType(.bfloat16),
     ]
 
     try MLX.save(arrays: arrays, metadata: [:], url: fileURL)

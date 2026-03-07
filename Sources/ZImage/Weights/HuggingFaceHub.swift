@@ -2,9 +2,9 @@ import Foundation
 import HuggingFace
 
 #if canImport(Darwin)
-import Darwin
+  import Darwin
 #else
-import Glibc
+  import Glibc
 #endif
 
 enum HuggingFaceHubError: Error, LocalizedError {
@@ -14,11 +14,11 @@ enum HuggingFaceHubError: Error, LocalizedError {
 
   var errorDescription: String? {
     switch self {
-    case let .invalidRepoId(repoId):
+    case .invalidRepoId(let repoId):
       return "Invalid Hugging Face repo id: \(repoId)"
-    case let .snapshotNotFound(repoId):
+    case .snapshotNotFound(let repoId):
       return "Snapshot not found for: \(repoId)"
-    case let .noFilesMatched(repoId, patterns):
+    case .noFilesMatched(let repoId, let patterns):
       return "No files matched for '\(repoId)' (patterns: \(patterns.joined(separator: ", ")))"
     }
   }
@@ -106,7 +106,8 @@ enum HuggingFaceHub {
     )
 
     let entries = try await client.listFiles(in: repo, kind: kind, revision: revision, recursive: true)
-    let filePaths = entries
+    let filePaths =
+      entries
       .filter { $0.type == .file }
       .map(\.path)
       .filter { filePath in
@@ -168,7 +169,7 @@ enum HuggingFaceHub {
 
   private static func detectHost() -> URL {
     if let endpoint = ProcessInfo.processInfo.environment["HF_ENDPOINT"],
-       let url = URL(string: endpoint)
+      let url = URL(string: endpoint)
     {
       return url
     }
@@ -181,9 +182,9 @@ enum HuggingFaceHub {
     }
 
     #if canImport(FoundationNetworking)
-    return URLSession(configuration: .default)
+      return URLSession(configuration: .default)
     #else
-    return URLSession(configuration: .background(withIdentifier: "zimage.swift.hub.\(UUID().uuidString)"))
+      return URLSession(configuration: .background(withIdentifier: "zimage.swift.hub.\(UUID().uuidString)"))
     #endif
   }
 }

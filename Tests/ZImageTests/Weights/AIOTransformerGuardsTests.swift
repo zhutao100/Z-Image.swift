@@ -1,6 +1,7 @@
 import Logging
 import MLX
 import XCTest
+
 @testable import ZImage
 
 final class AIOTransformerGuardsTests: XCTestCase {
@@ -29,7 +30,8 @@ final class AIOTransformerGuardsTests: XCTestCase {
       "layers.0.attention.to_out.0.weight": w,
     ]
 
-    let missing = ZImageAIOTransformerValidation.missingStrictRequiredKeys(in: weights, config: makeConfig(qkNorm: true))
+    let missing = ZImageAIOTransformerValidation.missingStrictRequiredKeys(
+      in: weights, config: makeConfig(qkNorm: true))
     XCTAssertTrue(missing.contains("layers.0.attention.norm_q.weight"))
     XCTAssertTrue(missing.contains("layers.0.attention.norm_k.weight"))
   }
@@ -41,7 +43,8 @@ final class AIOTransformerGuardsTests: XCTestCase {
       "layers.0.attention.to_out.0.weight": w,
     ]
 
-    let missing = ZImageAIOTransformerValidation.missingStrictRequiredKeys(in: weights, config: makeConfig(qkNorm: false))
+    let missing = ZImageAIOTransformerValidation.missingStrictRequiredKeys(
+      in: weights, config: makeConfig(qkNorm: false))
     XCTAssertTrue(missing.isEmpty)
   }
 

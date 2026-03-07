@@ -10,7 +10,9 @@ enum WeightsAudit {
     let extra: [String]
   }
 
-  static func audit(module: Module, weights: [String: MLXArray], prefix: String = "", logger: Logger, sample: Int = 5) -> Summary {
+  static func audit(module: Module, weights: [String: MLXArray], prefix: String = "", logger: Logger, sample: Int = 5)
+    -> Summary
+  {
     let params = module.parameters().flattened()
     var matched = 0
     var missingKeys: [String] = []
@@ -33,7 +35,9 @@ enum WeightsAudit {
     let missingSample = Array(missingKeys.prefix(max(0, sample)))
     let extraSample = Array(Array(remaining).sorted().prefix(max(0, sample)))
 
-    logger.info("\(prefix.isEmpty ? "module" : prefix) weights audit -> matched: \(matched), missing: \(missingKeys.count), extra: \(remaining.count)")
+    logger.info(
+      "\(prefix.isEmpty ? "module" : prefix) weights audit -> matched: \(matched), missing: \(missingKeys.count), extra: \(remaining.count)"
+    )
     if !missingKeys.isEmpty {
       let suffix = missingKeys.count > missingSample.count ? ", ..." : ""
       let sampleText = missingSample.isEmpty ? "" : " (sample: \(missingSample.joined(separator: ", "))\(suffix))"

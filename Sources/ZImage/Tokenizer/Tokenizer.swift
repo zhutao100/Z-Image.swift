@@ -78,7 +78,7 @@ public final class QwenTokenizer {
     var addedTokens: [String: Int] = [:]
     if FileManager.default.fileExists(atPath: addedTokensURL.path) {
       if let addedData = try? Data(contentsOf: addedTokensURL),
-         let addedObject = try? JSONSerialization.jsonObject(with: addedData, options: []) as? [String: Any]
+        let addedObject = try? JSONSerialization.jsonObject(with: addedData, options: []) as? [String: Any]
       {
         for (token, value) in addedObject {
           if let index = value as? Int {
@@ -96,7 +96,7 @@ public final class QwenTokenizer {
       let vocabURL = tokenizerDirectory.appending(path: "vocab.json")
       let mergesURL = tokenizerDirectory.appending(path: "merges.txt")
       guard FileManager.default.fileExists(atPath: vocabURL.path),
-            FileManager.default.fileExists(atPath: mergesURL.path)
+        FileManager.default.fileExists(atPath: mergesURL.path)
       else {
         throw QwenTokenizerError.fileNotFound(tokenizerDataURL)
       }
@@ -110,9 +110,7 @@ public final class QwenTokenizer {
       throw QwenTokenizerError.padTokenMissing
     }
 
-    guard let padId = tokenizer.convertTokenToId(padToken) ??
-      tokenizer.eosTokenId ??
-      tokenizer.bosTokenId
+    guard let padId = tokenizer.convertTokenToId(padToken) ?? tokenizer.eosTokenId ?? tokenizer.bosTokenId
     else {
       throw QwenTokenizerError.padTokenNotInVocabulary(padToken)
     }
@@ -156,7 +154,7 @@ public final class QwenTokenizer {
     var addedTokensMap: [String: Int] = [:]
     if FileManager.default.fileExists(atPath: addedTokensURL.path) {
       if let addedData = try? Data(contentsOf: addedTokensURL),
-         let added = try? JSONSerialization.jsonObject(with: addedData, options: []) as? [String: Any]
+        let added = try? JSONSerialization.jsonObject(with: addedData, options: []) as? [String: Any]
       {
         for (k, v) in added {
           if let i = v as? Int {
@@ -168,7 +166,8 @@ public final class QwenTokenizer {
     }
 
     let mergesText = try String(contentsOf: mergesURL, encoding: .utf8)
-    let merges: [String] = mergesText
+    let merges: [String] =
+      mergesText
       .components(separatedBy: .newlines)
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty && !$0.hasPrefix("#") }
@@ -185,7 +184,7 @@ public final class QwenTokenizer {
         "useRegex": true,
       ],
       "decoder": [
-        "type": "ByteLevel",
+        "type": "ByteLevel"
       ],
     ]
 
@@ -223,7 +222,8 @@ public final class QwenTokenizer {
 
     for prompt in prompts {
       var tokens = assembleTokens(for: prompt)
-      tokens = Self.trim(tokens, maxLength: targetLength, prefixCount: prefixTokens.count, suffixCount: suffixTokens.count)
+      tokens = Self.trim(
+        tokens, maxLength: targetLength, prefixCount: prefixTokens.count, suffixCount: suffixTokens.count)
       let (ids, mask) = Self.prepareSequence(
         tokens: tokens,
         padTokenId: padTokenId,
@@ -266,7 +266,7 @@ public final class QwenTokenizer {
 
     for prompt in prompts {
       let messages: [[String: Any]] = [
-        ["role": "user", "content": prompt],
+        ["role": "user", "content": prompt]
       ]
       let tokens = try tokenizer.applyChatTemplate(messages: messages)
       let trimmed = Self.trim(tokens, maxLength: targetLength, prefixCount: 0, suffixCount: 0)
@@ -341,7 +341,7 @@ public final class QwenTokenizer {
     var text = ""
     for message in messages {
       guard let role = message["role"] as? String,
-            let content = message["content"] as? String
+        let content = message["content"] as? String
       else {
         continue
       }
@@ -372,7 +372,7 @@ public final class QwenTokenizer {
     let contentEnd = max(contentStart, tokens.count - suffixCount)
     let content: [Int]
     if contentEnd > contentStart {
-      content = Array(tokens[contentStart ..< contentEnd])
+      content = Array(tokens[contentStart..<contentEnd])
     } else {
       content = []
     }
@@ -412,16 +412,16 @@ public final class QwenTokenizer {
   }
 
   private static let promptPrefix: String = """
-  <|im_start|>system
-  Describe the key features of the input image (color, shape, size, texture, objects, background),
-  then explain how the user's text instruction should alter or modify the image.
-  Generate a new image that meets the user's requirements while maintaining consistency with the
-  original input where appropriate.<|im_end|>
-  <|im_start|>user
-  """
+    <|im_start|>system
+    Describe the key features of the input image (color, shape, size, texture, objects, background),
+    then explain how the user's text instruction should alter or modify the image.
+    Generate a new image that meets the user's requirements while maintaining consistency with the
+    original input where appropriate.<|im_end|>
+    <|im_start|>user
+    """
 
   private static let promptSuffix: String = """
-  <|im_end|>
-  <|im_start|>assistant
-  """
+    <|im_end|>
+    <|im_start|>assistant
+    """
 }

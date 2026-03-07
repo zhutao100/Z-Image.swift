@@ -2,13 +2,13 @@ import Darwin
 import Dispatch
 import Foundation
 import Logging
-import Metal
 import MLX
+import Metal
 import ZImage
 
 #if canImport(CoreGraphics)
-import CoreGraphics
-import ImageIO
+  import CoreGraphics
+  import ImageIO
 #endif
 
 LoggingSystem.bootstrap { label in
@@ -157,20 +157,22 @@ enum ZImageCLI {
     let bar = useBar ? ProgressBar(total: steps) : nil
     Task {
       do {
-        _ = try await pipeline.generate(request, progressHandler: { progress in
-          guard !noProgress else { return }
-          guard progress.stage == .denoising else { return }
-          let completed = min(progress.totalSteps, max(0, progress.stepIndex))
+        _ = try await pipeline.generate(
+          request,
+          progressHandler: { progress in
+            guard !noProgress else { return }
+            guard progress.stage == .denoising else { return }
+            let completed = min(progress.totalSteps, max(0, progress.stepIndex))
 
-          if let bar {
-            bar.update(completed: completed)
-            if completed == progress.totalSteps {
-              bar.finish(forceNewline: true)
+            if let bar {
+              bar.update(completed: completed)
+              if completed == progress.totalSteps {
+                bar.finish(forceNewline: true)
+              }
+            } else {
+              PlainProgress.shared.report(completed: completed, total: progress.totalSteps)
             }
-          } else {
-            PlainProgress.shared.report(completed: completed, total: progress.totalSteps)
-          }
-        })
+          })
         if let bar { bar.finish(forceNewline: true) }
       } catch {
         logger.error("Generation failed: \(error)")
@@ -182,59 +184,60 @@ enum ZImageCLI {
   }
 
   private static func printUsage() {
-    print("""
-    Z-Image-Turbo Swift port
+    print(
+      """
+      Z-Image-Turbo Swift port
 
-    Usage: ZImageCLI --prompt "text" [options]
-      --prompt, -p           Text prompt (required)
-      --negative-prompt      Negative prompt
-      --width, -W            Output width (default \(ZImageModelMetadata.recommendedWidth))
-      --height, -H           Output height (default \(ZImageModelMetadata.recommendedHeight))
-      --steps, -s            Inference steps (default \(ZImageModelMetadata.recommendedInferenceSteps))
-      --guidance, -g         Guidance scale (default \(ZImageModelMetadata.recommendedGuidanceScale))
-      --seed                 Random seed
-      --output, -o           Output path (default z-image.png)
-      --model, -m            Model path or HuggingFace ID (default: \(ZImageRepository.id))
-      --weights-variant      Weights precision variant (e.g. fp16, bf16)
-      --force-transformer-override-only  Treat a local .safetensors as transformer-only override (disable AIO auto-detect)
-      --cache-limit          GPU memory cache limit in MB (default: unlimited)
-      --max-sequence-length  Maximum sequence length for text encoding (default: 512)
-      --lora, -l             LoRA weights path or HuggingFace ID
-      --lora-scale           LoRA scale factor (default: 1.0)
-      --enhance, -e          Enhance prompt using LLM (requires ~5GB extra VRAM)
-      --enhance-max-tokens   Max tokens for prompt enhancement (default: 512)
-      --no-progress          Disable progress output
-      --help, -h             Show help
+      Usage: ZImageCLI --prompt "text" [options]
+        --prompt, -p           Text prompt (required)
+        --negative-prompt      Negative prompt
+        --width, -W            Output width (default \(ZImageModelMetadata.recommendedWidth))
+        --height, -H           Output height (default \(ZImageModelMetadata.recommendedHeight))
+        --steps, -s            Inference steps (default \(ZImageModelMetadata.recommendedInferenceSteps))
+        --guidance, -g         Guidance scale (default \(ZImageModelMetadata.recommendedGuidanceScale))
+        --seed                 Random seed
+        --output, -o           Output path (default z-image.png)
+        --model, -m            Model path or HuggingFace ID (default: \(ZImageRepository.id))
+        --weights-variant      Weights precision variant (e.g. fp16, bf16)
+        --force-transformer-override-only  Treat a local .safetensors as transformer-only override (disable AIO auto-detect)
+        --cache-limit          GPU memory cache limit in MB (default: unlimited)
+        --max-sequence-length  Maximum sequence length for text encoding (default: 512)
+        --lora, -l             LoRA weights path or HuggingFace ID
+        --lora-scale           LoRA scale factor (default: 1.0)
+        --enhance, -e          Enhance prompt using LLM (requires ~5GB extra VRAM)
+        --enhance-max-tokens   Max tokens for prompt enhancement (default: 512)
+        --no-progress          Disable progress output
+        --help, -h             Show help
 
-    Subcommands:
-      quantize               Quantize model weights
-        --input, -i          Input model directory (required)
-        --output, -o         Output directory (required)
-        --bits               Bit width: 4 or 8 (default: 8)
-        --group-size         Group size: 32, 64, 128 (default: 32)
-        --verbose            Show progress
+      Subcommands:
+        quantize               Quantize model weights
+          --input, -i          Input model directory (required)
+          --output, -o         Output directory (required)
+          --bits               Bit width: 4 or 8 (default: 8)
+          --group-size         Group size: 32, 64, 128 (default: 32)
+          --verbose            Show progress
 
-      quantize-controlnet    Quantize ControlNet weights
-        --input, -i          Input ControlNet path or HuggingFace ID (required)
-        --output, -o         Output directory (required)
-        --bits               Bit width: 4 or 8 (default: 8)
-        --group-size         Group size: 32, 64, 128 (default: 32)
-        --verbose            Show progress
+        quantize-controlnet    Quantize ControlNet weights
+          --input, -i          Input ControlNet path or HuggingFace ID (required)
+          --output, -o         Output directory (required)
+          --bits               Bit width: 4 or 8 (default: 8)
+          --group-size         Group size: 32, 64, 128 (default: 32)
+          --verbose            Show progress
 
-      control                Generate with ControlNet conditioning
-        --prompt, -p         Text prompt (required)
-        --control-image, -c  Control image path (required)
-        --controlnet-weights Path to controlnet weights dir or HF ID (required)
-        --control-scale      Control scale (default: 0.75)
-        Use 'ZImageCLI control --help' for full options
+        control                Generate with ControlNet conditioning
+          --prompt, -p         Text prompt (required)
+          --control-image, -c  Control image path (required)
+          --controlnet-weights Path to controlnet weights dir or HF ID (required)
+          --control-scale      Control scale (default: 0.75)
+          Use 'ZImageCLI control --help' for full options
 
-    Examples:
-      ZImageCLI -p "a cute cat" -o cat.png
-      ZImageCLI -p "a sunset" -m models/z-image-turbo-q8
-      ZImageCLI -p "a forest" -m Tongyi-MAI/Z-Image-Turbo
-      ZImageCLI -p "a cut a cat" --lora ostris/z_image_turbo_childrens_drawings
-      ZImageCLI -p "cat" --enhance  # Enhanced prompt generation
-    """)
+      Examples:
+        ZImageCLI -p "a cute cat" -o cat.png
+        ZImageCLI -p "a sunset" -m models/z-image-turbo-q8
+        ZImageCLI -p "a forest" -m Tongyi-MAI/Z-Image-Turbo
+        ZImageCLI -p "a cut a cat" --lora ostris/z_image_turbo_childrens_drawings
+        ZImageCLI -p "cat" --enhance  # Enhanced prompt generation
+      """)
   }
 
   private static func runQuantize(args: [String]) throws {
@@ -311,20 +314,21 @@ enum ZImageCLI {
   }
 
   private static func printQuantizeUsage() {
-    print("""
-    Quantize model weights.
+    print(
+      """
+      Quantize model weights.
 
-    Usage: ZImageCLI quantize -i <input> -o <output> [options]
-      --input, -i          Input model directory (required)
-      --output, -o         Output directory (required)
-      --bits               Bit width: 4 or 8 (default: 8)
-      --group-size         Group size: 32, 64, 128 (default: 32)
-      --verbose            Show progress
-      --help, -h           Show help
+      Usage: ZImageCLI quantize -i <input> -o <output> [options]
+        --input, -i          Input model directory (required)
+        --output, -o         Output directory (required)
+        --bits               Bit width: 4 or 8 (default: 8)
+        --group-size         Group size: 32, 64, 128 (default: 32)
+        --verbose            Show progress
+        --help, -h           Show help
 
-    Example:
-      ZImageCLI quantize -i models/z-image-turbo -o models/z-image-turbo-q8 --verbose
-    """)
+      Example:
+        ZImageCLI quantize -i models/z-image-turbo -o models/z-image-turbo-q8 --verbose
+      """)
   }
 
   private static func runQuantizeControlnet(args: [String]) throws {
@@ -435,26 +439,27 @@ enum ZImageCLI {
   }
 
   private static func printQuantizeControlnetUsage() {
-    print("""
-    Quantize ControlNet weights.
+    print(
+      """
+      Quantize ControlNet weights.
 
-    Usage: ZImageCLI quantize-controlnet -i <input> -o <output> [options]
-      --input, -i          Input ControlNet path or HuggingFace ID (required)
-      --output, -o         Output directory (required)
-      --file, -f           Specific .safetensors file to quantize (optional)
-      --bits               Bit width: 4 or 8 (default: 8)
-      --group-size         Group size: 32, 64, 128 (default: 32)
-      --verbose            Show progress
-      --help, -h           Show help
+      Usage: ZImageCLI quantize-controlnet -i <input> -o <output> [options]
+        --input, -i          Input ControlNet path or HuggingFace ID (required)
+        --output, -o         Output directory (required)
+        --file, -f           Specific .safetensors file to quantize (optional)
+        --bits               Bit width: 4 or 8 (default: 8)
+        --group-size         Group size: 32, 64, 128 (default: 32)
+        --verbose            Show progress
+        --help, -h           Show help
 
-    Examples:
-      # From HuggingFace
-      ZImageCLI quantize-controlnet -i alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
-        --file Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors -o controlnet-2.1-q8 --verbose
+      Examples:
+        # From HuggingFace
+        ZImageCLI quantize-controlnet -i alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
+          --file Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors -o controlnet-2.1-q8 --verbose
 
-      # From local directory
-      ZImageCLI quantize-controlnet -i ./controlnet-union -o ./controlnet-union-q8 --verbose
-    """)
+        # From local directory
+        ZImageCLI quantize-controlnet -i ./controlnet-union -o ./controlnet-union-q8 --verbose
+      """)
   }
 
   // swiftlint:disable:next cyclomatic_complexity
@@ -635,61 +640,62 @@ enum ZImageCLI {
   }
 
   private static func printControlUsage() {
-    print("""
-    Generate images with ControlNet conditioning (supports v2.0/v2.1 with inpainting).
+    print(
+      """
+      Generate images with ControlNet conditioning (supports v2.0/v2.1 with inpainting).
 
-    Usage: ZImageCLI control --prompt "text" --controlnet-weights <path> [options]
-      --prompt, -p              Text prompt (required)
-      --negative-prompt, --np   Negative prompt
-      --control-image, -c       Control image path - Canny, HED, Depth, Pose, or MLSD
-      --inpaint-image, -i       Source image for inpainting (v2.0+)
-      --mask, --mask-image      Mask image for inpainting (white=fill, black=preserve)
-      --control-scale, --cs     Control context scale (default: 0.75, recommended: 0.65-0.90)
-      --controlnet-weights, --cw Path to controlnet safetensors or HuggingFace ID (required)
-      --control-file, --cf      Specific safetensors filename within repo (e.g., "Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors")
-      --width, -W               Output width (default \(ZImageModelMetadata.recommendedWidth))
-      --height, -H              Output height (default \(ZImageModelMetadata.recommendedHeight))
-      --steps, -s               Inference steps (default \(ZImageModelMetadata.recommendedInferenceSteps), increase for higher control scale)
-      --guidance, -g            Guidance scale (default \(ZImageModelMetadata.recommendedGuidanceScale))
-      --seed                    Random seed
-      --output, -o              Output path (default z-image-control.png)
-      --model, -m               Model path or HuggingFace ID (default: \(ZImageRepository.id))
-      --weights-variant         Weights precision variant (e.g. fp16, bf16)
-      --cache-limit             GPU memory cache limit in MB (default: unlimited)
-      --max-sequence-length     Maximum sequence length for text encoding (default: 512)
-      --no-progress             Disable progress output
-      --help, -h                Show help
+      Usage: ZImageCLI control --prompt "text" --controlnet-weights <path> [options]
+        --prompt, -p              Text prompt (required)
+        --negative-prompt, --np   Negative prompt
+        --control-image, -c       Control image path - Canny, HED, Depth, Pose, or MLSD
+        --inpaint-image, -i       Source image for inpainting (v2.0+)
+        --mask, --mask-image      Mask image for inpainting (white=fill, black=preserve)
+        --control-scale, --cs     Control context scale (default: 0.75, recommended: 0.65-0.90)
+        --controlnet-weights, --cw Path to controlnet safetensors or HuggingFace ID (required)
+        --control-file, --cf      Specific safetensors filename within repo (e.g., "Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors")
+        --width, -W               Output width (default \(ZImageModelMetadata.recommendedWidth))
+        --height, -H              Output height (default \(ZImageModelMetadata.recommendedHeight))
+        --steps, -s               Inference steps (default \(ZImageModelMetadata.recommendedInferenceSteps), increase for higher control scale)
+        --guidance, -g            Guidance scale (default \(ZImageModelMetadata.recommendedGuidanceScale))
+        --seed                    Random seed
+        --output, -o              Output path (default z-image-control.png)
+        --model, -m               Model path or HuggingFace ID (default: \(ZImageRepository.id))
+        --weights-variant         Weights precision variant (e.g. fp16, bf16)
+        --cache-limit             GPU memory cache limit in MB (default: unlimited)
+        --max-sequence-length     Maximum sequence length for text encoding (default: 512)
+        --no-progress             Disable progress output
+        --help, -h                Show help
 
-    Note: At least one of --control-image, --inpaint-image, or --mask must be provided.
+      Note: At least one of --control-image, --inpaint-image, or --mask must be provided.
 
-    Control Types:
-      The control image should be pre-processed according to the control type:
-      - Canny: Edge detection output (white edges on black background)
-      - HED: Holistically-nested edge detection output
-      - Depth: Depth map (grayscale, closer=brighter or depth estimation output)
-      - Pose: OpenPose/DWPose skeleton visualization
-      - MLSD: Line segment detection output
+      Control Types:
+        The control image should be pre-processed according to the control type:
+        - Canny: Edge detection output (white edges on black background)
+        - HED: Holistically-nested edge detection output
+        - Depth: Depth map (grayscale, closer=brighter or depth estimation output)
+        - Pose: OpenPose/DWPose skeleton visualization
+        - MLSD: Line segment detection output
 
-    Examples:
-      # T2I with pose control using v2.1 weights (recommended)
-      ZImageCLI control -p "a woman on a beach" -c pose.jpg \\
-        --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
-        --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors
+      Examples:
+        # T2I with pose control using v2.1 weights (recommended)
+        ZImageCLI control -p "a woman on a beach" -c pose.jpg \\
+          --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
+          --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors
 
-      # I2I inpainting with pose control
-      ZImageCLI control -p "a dancer" -c pose.jpg -i photo.jpg --mask mask.png \\
-        --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
-        --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors --cs 0.75 -s 25
+        # I2I inpainting with pose control
+        ZImageCLI control -p "a dancer" -c pose.jpg -i photo.jpg --mask mask.png \\
+          --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
+          --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors --cs 0.75 -s 25
 
-      # Inpainting without control guidance
-      ZImageCLI control -p "a cat sitting" -i photo.jpg --mask mask.png \\
-        --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
-        --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors
+        # Inpainting without control guidance
+        ZImageCLI control -p "a cat sitting" -i photo.jpg --mask mask.png \\
+          --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
+          --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors
 
-      # Using local controlnet weights
-      ZImageCLI control -p "a forest path" -c depth.jpg --cs 0.7 \\
-        --cw ./controlnet-q8 -o forest.png
-    """)
+        # Using local controlnet weights
+        ZImageCLI control -p "a forest path" -c depth.jpg --cs 0.7 \\
+          --cw ./controlnet-q8 -o forest.png
+      """)
   }
 
   private static func nextValue(for arg: String, iterator: inout IndexingIterator<[String]>) -> String {
@@ -699,12 +705,15 @@ enum ZImageCLI {
     return value
   }
 
-  private static func intValue(for arg: String, iterator: inout IndexingIterator<[String]>, minimum: Int, fallback: Int) -> Int {
+  private static func intValue(for arg: String, iterator: inout IndexingIterator<[String]>, minimum: Int, fallback: Int)
+    -> Int
+  {
     guard let value = Int(nextValue(for: arg, iterator: &iterator)) else { return fallback }
     return max(minimum, value)
   }
 
-  private static func floatValue(for arg: String, iterator: inout IndexingIterator<[String]>, fallback: Float) -> Float {
+  private static func floatValue(for arg: String, iterator: inout IndexingIterator<[String]>, fallback: Float) -> Float
+  {
     Float(nextValue(for: arg, iterator: &iterator)) ?? fallback
   }
 }

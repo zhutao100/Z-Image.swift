@@ -10,8 +10,12 @@ enum ZImageTransformerOverride {
     if let w = weights["layers.0.attention.to_q.weight"], w.ndim == 2 { return w.dim(0) }
     if let w = weights["layers.0.attention.to_out.0.weight"], w.ndim == 2 { return w.dim(1) }
     // Scan for any norm weight
-    if let (_, w) = weights.first(where: { $0.key.hasSuffix("attention_norm1.weight") && $0.value.ndim == 1 }) { return w.dim(0) }
-    if let (_, w) = weights.first(where: { $0.key.hasSuffix("ffn_norm1.weight") && $0.value.ndim == 1 }) { return w.dim(0) }
+    if let (_, w) = weights.first(where: { $0.key.hasSuffix("attention_norm1.weight") && $0.value.ndim == 1 }) {
+      return w.dim(0)
+    }
+    if let (_, w) = weights.first(where: { $0.key.hasSuffix("ffn_norm1.weight") && $0.value.ndim == 1 }) {
+      return w.dim(0)
+    }
     return nil
   }
 
@@ -42,9 +46,9 @@ enum ZImageTransformerOverride {
       // Split attention.qkv.weight -> to_q.weight, to_k.weight, to_v.weight
       if key.hasSuffix(".attention.qkv.weight") {
         if v.ndim == 2, v.dim(0) == dim * 3, v.dim(1) == dim {
-          let q = v[0 ..< dim, 0...]
-          let kW = v[dim ..< 2 * dim, 0...]
-          let vW = v[2 * dim ..< 3 * dim, 0...]
+          let q = v[0..<dim, 0...]
+          let kW = v[dim..<2 * dim, 0...]
+          let vW = v[2 * dim..<3 * dim, 0...]
           let base = key.replacingOccurrences(of: ".attention.qkv.weight", with: "")
           out["\(base).attention.to_q.weight"] = q
           out["\(base).attention.to_k.weight"] = kW

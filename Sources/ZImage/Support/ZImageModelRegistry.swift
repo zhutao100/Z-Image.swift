@@ -23,7 +23,7 @@ public enum ZImageModelRegistry {
     if normalized == ZImageKnownModel.zImageTurbo.id { return true }
     if normalized == ZImageKnownModel.zImage.id { return true }
     if normalized == ZImageKnownModel.zImageTurbo8bit.id { return true }
-    if normalized == "mzbac/Z-Image-Turbo-8bit" { return true } // common alternative capitalization
+    if normalized == "mzbac/Z-Image-Turbo-8bit" { return true }  // common alternative capitalization
     return false
   }
 }

@@ -1,7 +1,7 @@
 import Foundation
 import MLX
-import MLXNN
 import MLXFast
+import MLXNN
 
 final class QwenVisionAttention: Module {
   let embedDim: Int
@@ -38,9 +38,9 @@ final class QwenVisionAttention: Module {
     states = qkv(states)
     states = states.reshaped(batch, sequence, 3, numHeads, headDim)
     // Linear outputs before rotary, flattened over heads
-    let qPre = states[0..., 0..., 0..<1, 0..., 0...].squeezed(axis: 2) // [B,S,H,D]
-    let kPre = states[0..., 0..., 1..<2, 0..., 0...].squeezed(axis: 2) // [B,S,H,D]
-    let vPre = states[0..., 0..., 2..<3, 0..., 0...].squeezed(axis: 2) // [B,S,H,D]
+    let qPre = states[0..., 0..., 0..<1, 0..., 0...].squeezed(axis: 2)  // [B,S,H,D]
+    let kPre = states[0..., 0..., 1..<2, 0..., 0...].squeezed(axis: 2)  // [B,S,H,D]
+    let vPre = states[0..., 0..., 2..<3, 0..., 0...].squeezed(axis: 2)  // [B,S,H,D]
 
     var q = qPre.transposed(0, 2, 1, 3)
     var k = kPre.transposed(0, 2, 1, 3)
@@ -64,7 +64,7 @@ final class QwenVisionAttention: Module {
 
     context = context.reshaped(batch, sequence, embedDim)
     context = proj(context)
-    return context 
+    return context
   }
 
   private func prepareAttentionMask(

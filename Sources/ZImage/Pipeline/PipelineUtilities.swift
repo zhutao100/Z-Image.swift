@@ -37,11 +37,12 @@ public enum PipelineUtilities {
     height: Int,
     width: Int
   ) -> MLXArray {
-    let input: MLXArray = if latents.dtype == .bfloat16 {
-      latents
-    } else {
-      latents.asType(.bfloat16)
-    }
+    let input: MLXArray =
+      if latents.dtype == .bfloat16 {
+        latents
+      } else {
+        latents.asType(.bfloat16)
+      }
 
     let (decoded, _) = vae.decode(input, return_dict: false)
     var image = decoded
@@ -80,15 +81,16 @@ public enum PipelineUtilities {
     let normalizedWeightsVariant = ZImageFiles.normalizedWeightsVariant(weightsVariant)
     let patterns = PipelineSnapshot.modelFilePatterns(weightsVariant: normalizedWeightsVariant)
     let requireWeights = patterns.contains(where: { $0.localizedCaseInsensitiveContains("safetensors") })
-    let snapshotValidator: (@Sendable (URL) -> Bool)? = if let normalizedWeightsVariant {
-      { snapshot in
-        !ZImageFiles.resolveTransformerWeights(at: snapshot, weightsVariant: normalizedWeightsVariant).isEmpty
-          && !ZImageFiles.resolveTextEncoderWeights(at: snapshot, weightsVariant: normalizedWeightsVariant).isEmpty
-          && !ZImageFiles.resolveVAEWeights(at: snapshot, weightsVariant: normalizedWeightsVariant).isEmpty
+    let snapshotValidator: (@Sendable (URL) -> Bool)? =
+      if let normalizedWeightsVariant {
+        { snapshot in
+          !ZImageFiles.resolveTransformerWeights(at: snapshot, weightsVariant: normalizedWeightsVariant).isEmpty
+            && !ZImageFiles.resolveTextEncoderWeights(at: snapshot, weightsVariant: normalizedWeightsVariant).isEmpty
+            && !ZImageFiles.resolveVAEWeights(at: snapshot, weightsVariant: normalizedWeightsVariant).isEmpty
+        }
+      } else {
+        nil
       }
-    } else {
-      nil
-    }
     return try await ModelResolution.resolveOrDefault(
       modelSpec: model,
       defaultModelId: defaultModelId,
@@ -121,9 +123,9 @@ public enum PipelineUtilities {
 
     public var errorDescription: String? {
       switch self {
-      case let .widthNotDivisible(width, scale):
+      case .widthNotDivisible(let width, let scale):
         "Width must be divisible by \(scale) (got \(width)). Please adjust to a multiple of \(scale)."
-      case let .heightNotDivisible(height, scale):
+      case .heightNotDivisible(let height, let scale):
         "Height must be divisible by \(scale) (got \(height)). Please adjust to a multiple of \(scale)."
       }
     }

@@ -9,13 +9,13 @@ public enum ModelResolutionError: Error, LocalizedError {
 
   public var errorDescription: String? {
     switch self {
-    case let .modelNotFound(spec):
+    case .modelNotFound(let spec):
       return "Model not found: \(spec)"
-    case let .downloadFailed(modelId, error):
+    case .downloadFailed(let modelId, let error):
       return "Failed to download '\(modelId)': \(error.localizedDescription)"
     case .networkUnavailable:
       return "No internet connection. Please check your network or use a local model path."
-    case let .authorizationRequired(modelId):
+    case .authorizationRequired(let modelId):
       return "Model '\(modelId)' not found or requires authentication"
     }
   }
@@ -46,7 +46,9 @@ public enum ModelResolution {
       return false
     }
 
-    let pathIndicators = ["models", "model", "weights", "data", "datasets", "checkpoints", "output", "tmp", "temp", "cache"]
+    let pathIndicators = [
+      "models", "model", "weights", "data", "datasets", "checkpoints", "output", "tmp", "temp", "cache",
+    ]
     if pathIndicators.contains(org.lowercased()) {
       return false
     }
@@ -191,7 +193,8 @@ public enum ModelResolution {
 
     // HuggingFace CLI / huggingface_hub cache layout:
     // ~/.cache/huggingface/hub/models--ORG--REPO/snapshots/<commit>/
-    let repoCacheRoot = cacheDir
+    let repoCacheRoot =
+      cacheDir
       .appendingPathComponent("models--\(modelId.replacingOccurrences(of: "/", with: "--"))")
     let snapshotsRoot = repoCacheRoot.appendingPathComponent("snapshots")
 
@@ -256,14 +259,14 @@ public enum ModelResolution {
       )
     } catch {
       if let clientError = error as? HTTPClientError,
-         case let .responseError(response, _) = clientError,
-         response.statusCode == 401 || response.statusCode == 403
+        case .responseError(let response, _) = clientError,
+        response.statusCode == 401 || response.statusCode == 403
       {
         throw ModelResolutionError.authorizationRequired(modelId)
       }
 
       if let urlError = error as? URLError,
-         urlError.code == .notConnectedToInternet
+        urlError.code == .notConnectedToInternet
       {
         throw ModelResolutionError.networkUnavailable
       }

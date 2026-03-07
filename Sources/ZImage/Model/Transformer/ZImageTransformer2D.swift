@@ -246,7 +246,8 @@ public final class ZImageTransformer2DModel: Module {
       capFeat = MLX.where(MLX.expandedDimensions(capPadMask, axis: 2), pad, capFeat)
     }
 
-    var image = latentsWithFrame
+    var image =
+      latentsWithFrame
       .reshaped(batch, channels, cached.fTokens, fPatchSize, cached.hTokens, patchSize, cached.wTokens, patchSize)
       .transposed(0, 2, 4, 6, 3, 5, 7, 1)
       .reshaped(batch, cached.imageTokens, patchSize * patchSize * fPatchSize * channels)
@@ -296,7 +297,8 @@ public final class ZImageTransformer2DModel: Module {
     let projected = finalLayer(imageOut, conditioning: tEmb)
     let outChannels = configuration.inChannels
 
-    var reshaped = projected
+    var reshaped =
+      projected
       .reshaped(batch, cached.fTokens, cached.hTokens, cached.wTokens, fPatchSize, patchSize, patchSize, outChannels)
       .transposed(0, 7, 1, 4, 2, 5, 3, 6)
       .reshaped(batch, outChannels, cached.fTokens * fPatchSize, cached.hTokens * patchSize, cached.wTokens * patchSize)

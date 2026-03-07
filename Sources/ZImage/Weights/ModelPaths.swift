@@ -26,7 +26,8 @@ public enum ZImageRepository {
     let normalized = ZImageModelRegistry.normalizedModelId(from: modelId)
     let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
 
-    let replaced = normalized
+    let replaced =
+      normalized
       .replacingOccurrences(of: "/", with: "--")
       .unicodeScalars
       .map { allowed.contains($0) ? Character($0) : Character("-") }
@@ -135,12 +136,12 @@ public enum ZImageFiles {
 
     public var errorDescription: String? {
       switch self {
-      case let .missingRequiredComponentWeights(weightsVariant, missingComponents, snapshot):
+      case .missingRequiredComponentWeights(let weightsVariant, let missingComponents, let snapshot):
         let components = missingComponents.sorted().joined(separator: ", ")
         return """
-        Requested weightsVariant '\(weightsVariant)' but missing required component weights: \(components).
-        Snapshot: \(snapshot.path)
-        """
+          Requested weightsVariant '\(weightsVariant)' but missing required component weights: \(components).
+          Snapshot: \(snapshot.path)
+          """
       }
     }
   }
@@ -195,8 +196,8 @@ public enum ZImageFiles {
     }
 
     // Find any occurrence of `needle` that is bounded by non-alnum chars (or string boundaries).
-    for i in 0 ... (hayChars.count - needleChars.count) {
-      if Array(hayChars[i ..< i + needleChars.count]) != needleChars { continue }
+    for i in 0...(hayChars.count - needleChars.count) {
+      if Array(hayChars[i..<i + needleChars.count]) != needleChars { continue }
 
       let before = i > 0 ? hayChars[i - 1] : nil
       let afterIndex = i + needleChars.count
@@ -218,7 +219,7 @@ public enum ZImageFiles {
     guard let ofRange = stem.range(of: "-of-", options: .backwards) else { return stem }
     guard let lastDash = stem[..<ofRange.lowerBound].lastIndex(of: "-") else { return stem }
 
-    let shardIndex = stem[stem.index(after: lastDash) ..< ofRange.lowerBound]
+    let shardIndex = stem[stem.index(after: lastDash)..<ofRange.lowerBound]
     guard !shardIndex.isEmpty, shardIndex.allSatisfy(\.isNumber) else { return stem }
 
     let afterOf = stem[ofRange.upperBound...]
@@ -241,13 +242,14 @@ public enum ZImageFiles {
   ) -> [String] {
     guard !files.isEmpty else { return [] }
 
-    let filtered: [String] = if let weightsVariant, !weightsVariant.isEmpty {
-      files.filter {
-        matchesWeightsVariant(filename: ($0 as NSString).lastPathComponent, weightsVariant: weightsVariant)
+    let filtered: [String] =
+      if let weightsVariant, !weightsVariant.isEmpty {
+        files.filter {
+          matchesWeightsVariant(filename: ($0 as NSString).lastPathComponent, weightsVariant: weightsVariant)
+        }
+      } else {
+        files
       }
-    } else {
-      files
-    }
 
     guard !filtered.isEmpty else { return [] }
 
@@ -377,17 +379,19 @@ public enum ZImageFiles {
     )
     for indexURL in indexCandidates {
       guard let data = try? Data(contentsOf: indexURL),
-            let idx = try? JSONDecoder().decode(SafetensorsIndex.self, from: data),
-            let weightMap = idx.weight_map
+        let idx = try? JSONDecoder().decode(SafetensorsIndex.self, from: data),
+        let weightMap = idx.weight_map
       else { continue }
 
       let uniqueFiles = Array(Set(weightMap.values))
-      var relative = uniqueFiles
+      var relative =
+        uniqueFiles
         .map { file in file.contains("/") ? file : "\(componentDir)/\(file)" }
         .filter { fm.fileExists(atPath: snapshot.appending(path: $0).path) }
 
       if let weightsVariant, !weightsVariant.isEmpty {
-        let indexHasVariant = matchesWeightsVariant(filename: indexURL.lastPathComponent, weightsVariant: weightsVariant)
+        let indexHasVariant = matchesWeightsVariant(
+          filename: indexURL.lastPathComponent, weightsVariant: weightsVariant)
         if !indexHasVariant {
           relative = relative.filter {
             matchesWeightsVariant(filename: ($0 as NSString).lastPathComponent, weightsVariant: weightsVariant)
@@ -422,7 +426,8 @@ public enum ZImageFiles {
       }
       let candidates = preferred.isEmpty ? safetensors : preferred
 
-      var relativeAll = candidates
+      var relativeAll =
+        candidates
         .map { "\(componentDir)/\($0.lastPathComponent)" }
       let selected = selectDeterministicGroup(
         files: relativeAll,
@@ -461,7 +466,7 @@ public enum ZImageFiles {
       guard let ofRange = name.range(of: "-of-") else { return nil }
       if let lastDash = name[..<ofRange.lowerBound].lastIndex(of: "-") {
         let start = name.index(after: lastDash)
-        let idxStr = String(name[start ..< ofRange.lowerBound])
+        let idxStr = String(name[start..<ofRange.lowerBound])
         return Int(idxStr)
       }
       return nil
@@ -469,7 +474,7 @@ public enum ZImageFiles {
     let ia = shardIndex((a as NSString).lastPathComponent)
     let ib = shardIndex((b as NSString).lastPathComponent)
     switch (ia, ib) {
-    case let (xa?, xb?):
+    case (let xa?, let xb?):
       return xa < xb
     case (nil, nil):
       return a.localizedCompare(b) == .orderedAscending

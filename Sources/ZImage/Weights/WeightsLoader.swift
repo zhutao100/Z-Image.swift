@@ -14,7 +14,8 @@ public final class ZImageWeightsLoader {
 
   public func listComponents() {
     let fm = FileManager.default
-    let files = ZImageFiles.resolveTransformerWeights(at: snapshot)
+    let files =
+      ZImageFiles.resolveTransformerWeights(at: snapshot)
       + ZImageFiles.resolveTextEncoderWeights(at: snapshot)
       + ZImageFiles.resolveVAEWeights(at: snapshot)
     for file in files {

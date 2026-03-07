@@ -1,5 +1,6 @@
-import XCTest
 import MLX
+import XCTest
+
 @testable import ZImage
 
 /// Unit tests for prompt enhancement components
@@ -84,12 +85,12 @@ final class PromptEnhancementTests: XCTestCase {
     MLX.eval(logits)
 
     let result = argMaxSample(logits: logits)
-    XCTAssertEqual(result, 1) // -0.1 is the highest
+    XCTAssertEqual(result, 1)  // -0.1 is the highest
   }
 
   func testApplyRepetitionPenalty() {
     let logits = MLXArray([Float(1.0), Float(2.0), Float(3.0), Float(4.0), Float(5.0)])
-    let tokens = [1, 3] // Penalize indices 1 and 3
+    let tokens = [1, 3]  // Penalize indices 1 and 3
     let penalty: Float = 2.0
 
     let result = applyRepetitionPenalty(logits: logits, tokens: tokens, penalty: penalty)
@@ -111,7 +112,7 @@ final class PromptEnhancementTests: XCTestCase {
 
   func testApplyRepetitionPenaltyWithNegativeLogits() {
     let logits = MLXArray([Float(-2.0), Float(-1.0), Float(0.0), Float(1.0), Float(2.0)])
-    let tokens = [0, 4] // Penalize indices 0 and 4
+    let tokens = [0, 4]  // Penalize indices 0 and 4
     let penalty: Float = 2.0
 
     let result = applyRepetitionPenalty(logits: logits, tokens: tokens, penalty: penalty)
@@ -165,7 +166,7 @@ final class PromptEnhancementTests: XCTestCase {
     )
 
     let result = sampleToken(logits: logits, config: config, previousTokens: [])
-    XCTAssertEqual(result, 2) // Index 2 has highest value (0.9)
+    XCTAssertEqual(result, 2)  // Index 2 has highest value (0.9)
   }
 
   func testSampleTokenWithZeroTemperatureAndRepetitionPenalty() {
@@ -176,7 +177,7 @@ final class PromptEnhancementTests: XCTestCase {
     let config = GenerationConfig(
       temperature: 0,
       topP: 0.9,
-      repetitionPenalty: 10.0, // Heavy penalty
+      repetitionPenalty: 10.0,  // Heavy penalty
       repetitionContextSize: 20
     )
 
@@ -215,7 +216,7 @@ final class PromptEnhancementTests: XCTestCase {
 
     let config = GenerationConfig(
       temperature: 0.7,
-      topP: 0.5, // 0 < topP < 1 triggers top-p sampling
+      topP: 0.5,  // 0 < topP < 1 triggers top-p sampling
       repetitionPenalty: nil
     )
 
@@ -234,7 +235,7 @@ final class PromptEnhancementTests: XCTestCase {
 
     let config = GenerationConfig(
       temperature: 0.7,
-      topP: 1.0, // topP >= 1 triggers categorical sampling
+      topP: 1.0,  // topP >= 1 triggers categorical sampling
       repetitionPenalty: nil
     )
 

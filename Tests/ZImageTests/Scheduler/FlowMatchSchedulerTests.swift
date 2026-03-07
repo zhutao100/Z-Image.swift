@@ -1,5 +1,6 @@
-import XCTest
 import MLX
+import XCTest
+
 @testable import ZImage
 
 final class FlowMatchSchedulerTests: XCTestCase {
@@ -13,7 +14,7 @@ final class FlowMatchSchedulerTests: XCTestCase {
 
     XCTAssertEqual(scheduler.numInferenceSteps, 9)
     XCTAssertEqual(scheduler.timesteps.dim(0), 9)
-    XCTAssertEqual(scheduler.sigmas.dim(0), 10) // steps + 1 (includes final 0)
+    XCTAssertEqual(scheduler.sigmas.dim(0), 10)  // steps + 1 (includes final 0)
   }
 
   func testSchedulerInitializationWithCustomSteps() {
@@ -85,7 +86,7 @@ final class FlowMatchSchedulerTests: XCTestCase {
     )
 
     // Calculate mu for a typical image sequence length
-    let imageSeqLen = 1024 // 32x32 latent
+    let imageSeqLen = 1024  // 32x32 latent
     let mu = calculateTestMu(
       imageSeqLen: imageSeqLen,
       baseSeqLen: 256,
@@ -105,14 +106,14 @@ final class FlowMatchSchedulerTests: XCTestCase {
   }
 
   func testDynamicShiftingDisabled() {
-    let config = Self.makeConfig(shift: 3.0) // Non-unity shift
+    let config = Self.makeConfig(shift: 3.0)  // Non-unity shift
 
     let scheduler = FlowMatchEulerScheduler(numInferenceSteps: 9, config: config)
     let sigmas = scheduler.sigmas.asArray(Float.self)
 
     // Shifted sigmas should be different from unshifted
     // The shift formula: sigma_shifted = shift * sigma / (1 + (shift - 1) * sigma)
-    XCTAssertGreaterThan(sigmas[0], 0.5) // Should still be reasonably high
+    XCTAssertGreaterThan(sigmas[0], 0.5)  // Should still be reasonably high
     XCTAssertEqual(sigmas.last!, 0.0, accuracy: 1e-6)
   }
 
@@ -233,7 +234,7 @@ extension FlowMatchSchedulerTests {
     var json: [String: Any] = [
       "num_train_timesteps": numTrainTimesteps,
       "shift": shift,
-      "use_dynamic_shifting": useDynamicShifting
+      "use_dynamic_shifting": useDynamicShifting,
     ]
     if let baseShift = baseShift { json["base_shift"] = baseShift }
     if let maxShift = maxShift { json["max_shift"] = maxShift }

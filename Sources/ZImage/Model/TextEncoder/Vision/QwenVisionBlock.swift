@@ -13,7 +13,8 @@ final class QwenVisionBlock: Module {
     self.blockIndex = blockIndex
     self._norm1.wrappedValue = RMSNorm(dimensions: configuration.embedDim, eps: configuration.eps)
     self._norm2.wrappedValue = RMSNorm(dimensions: configuration.embedDim, eps: configuration.eps)
-    self._attention.wrappedValue = QwenVisionAttention(embedDim: configuration.embedDim, numHeads: configuration.numHeads)
+    self._attention.wrappedValue = QwenVisionAttention(
+      embedDim: configuration.embedDim, numHeads: configuration.numHeads)
     let hiddenDim = configuration.mlpHiddenDim
     self._mlp.wrappedValue = QwenVisionMLP(
       dim: configuration.embedDim,

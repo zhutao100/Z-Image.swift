@@ -72,7 +72,9 @@ public enum LoRAWeightLoader {
     }
 
     guard !loraWeights.isEmpty || !lokrWeights.isEmpty else {
-      throw LoRAError.invalidFormat("No valid LoRA weight pairs found. Expected keys with .lora_down/.lora_up, .lora_A/.lora_B, or LyCORIS LoKr (.lokr_w1/.lokr_w2).")
+      throw LoRAError.invalidFormat(
+        "No valid LoRA weight pairs found. Expected keys with .lora_down/.lora_up, .lora_A/.lora_B, or LyCORIS LoKr (.lokr_w1/.lokr_w2)."
+      )
     }
 
     let rank = inferRank(from: loraWeights)
@@ -83,13 +85,13 @@ public enum LoRAWeightLoader {
 
   public static func resolveSource(_ source: LoRASource) async throws -> URL {
     switch source {
-    case let .local(url):
+    case .local(let url):
       guard FileManager.default.fileExists(atPath: url.path) else {
         throw LoRAError.fileNotFound(url.path)
       }
       return url
 
-    case let .huggingFace(modelId, filename):
+    case .huggingFace(let modelId, let filename):
       return try await downloadFromHuggingFace(modelId: modelId, filename: filename)
     }
   }
@@ -117,7 +119,8 @@ public enum LoRAWeightLoader {
       for key in keys {
         let matchedDownPattern = loraPatterns.first { key.contains($0.down) }?.down
         guard let downPattern = matchedDownPattern,
-              let tensor = try? reader.tensor(named: key) else { continue }
+          let tensor = try? reader.tensor(named: key)
+        else { continue }
 
         let layerName = extractBaseKey(key, pattern: downPattern) ?? key
         targetLayers.append(layerName)
@@ -183,9 +186,9 @@ public enum LoRAWeightLoader {
     let configPath = directory.appendingPathComponent("adapter_config.json")
 
     guard FileManager.default.fileExists(atPath: configPath.path),
-          let data = try? Data(contentsOf: configPath),
-          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let alpha = json["lora_alpha"] as? NSNumber
+      let data = try? Data(contentsOf: configPath),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let alpha = json["lora_alpha"] as? NSNumber
     else {
       return nil
     }
