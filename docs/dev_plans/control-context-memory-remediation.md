@@ -20,7 +20,7 @@ Every phase must be evaluated before it is wrapped and committed.
 Repo verification:
 
 ```bash
-xcodebuild test -scheme zimage.swift-Package -destination 'platform=macOS' -enableCodeCoverage NO -only-testing:ZImageTests
+swift test
 xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
 ```
 

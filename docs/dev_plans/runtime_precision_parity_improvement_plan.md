@@ -25,7 +25,7 @@ Every phase must be evaluated with the same fixed-seed probes before the phase i
 
 Repo verification:
 
-- `xcodebuild test -scheme zimage.swift-Package -destination 'platform=macOS' -enableCodeCoverage NO -only-testing:ZImageTests`
+- `swift test`
 - `xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode`
 
 Base-image parity probe:

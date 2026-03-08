@@ -113,8 +113,8 @@ Prefer one detailed explanation in `docs/` and link to it rather than duplicatin
 When changing `ZImageControlPipeline`, ControlNet loading, or the VAE encode/decode path, use the retained high-resolution probe:
 
 ```bash
-xcodebuild test -scheme zimage.swift-Package -destination 'platform=macOS' -enableCodeCoverage NO -only-testing:ZImageTests
-xcodebuild build -scheme ZImageCLI -destination 'platform=macOS' -derivedDataPath .build/xcode
+swift test
+xcodebuild build -scheme ZImageCLI -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/xcode
 .build/xcode/Build/Products/Debug/ZImageCLI control \
   --prompt "memory validation" \
   --control-image images/canny.jpg \

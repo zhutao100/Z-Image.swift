@@ -78,7 +78,7 @@ xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform
 Run the default verification suite:
 
 ```bash
-xcodebuild test -scheme zimage.swift-Package -destination 'platform=macOS' -enableCodeCoverage NO -only-testing:ZImageTests
+swift test
 ```
 
 ## CI And Release Expectations
