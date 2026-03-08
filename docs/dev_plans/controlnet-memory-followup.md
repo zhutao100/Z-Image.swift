@@ -2,7 +2,7 @@
 
 This plan turns the still-open findings in `docs/debug_notes/controlnet-memory-analysis.md` into a measured next sequence after the completed March 7, 2026 remediation work.
 
-Execution status: phase 1 completed on March 8, 2026; phase 2 remains open.
+Execution status: phases 1 and 2 completed on March 8, 2026; phase 3 not pursued.
 
 ## Goal
 
@@ -149,7 +149,7 @@ Execution result:
 
 ## Phase 2: Consolidate Lifecycle Boundaries And Telemetry
 
-Status: proposed
+Status: completed on March 8, 2026
 
 Objective:
 
@@ -173,9 +173,20 @@ Acceptance criteria:
 - loader sequencing is simpler than the pre-phase code, not more abstract
 - memory and quality stay at least as good as phase 1
 
+Execution result:
+
+- added telemetry at the deferred denoising load boundary
+- the high-resolution probe now isolates the remaining jump cleanly:
+  - `transformer.denoising-load.after-apply`: resident `23.24 GiB`, active `22.93 GiB`
+  - `controlnet.denoising-load.after-apply`: resident `29.49 GiB`, active `29.19 GiB`
+  - `denoising.before-start`: resident `29.49 GiB`, active `29.19 GiB`
+- that shows the remaining pre-denoising climb is not hidden control-context residue; it is the live transformer plus ControlNet residency required for denoising
+- fixed-seed output stayed bit-identical to phase 1 and the March 8 rerun baseline:
+  - phase 2 SHA-256: `b5f1585314323c7e12f3a4871644346ac9d5f2470cfbf74c11935e9f2c558b98`
+
 ## Phase 3: Optional Tiled Control And Inpaint VAE Encode
 
-Status: proposed, gated on phase 1 and 2 results
+Status: skipped on March 8, 2026
 
 Objective:
 
@@ -199,6 +210,13 @@ Acceptance criteria:
 - the control-context build path shows a material peak-memory reduction beyond phase 1 and 2
 - quality drift is zero or small enough to quantify and justify
 - the implementation does not duplicate a second independent encode stack unnecessarily
+
+Execution decision:
+
+- phase 3 was not pursued
+- after phase 2, `control-context.after-clear-cache` stayed around `314.61 MiB` while the denoising load boundary returned to `29.49 GiB`
+- that means tiled control and inpaint VAE encode would not address the remaining peak-memory limiter for this workload
+- the next meaningful reduction would need to target denoiser residency directly, not control-context construction
 
 ## Execution Log
 
@@ -233,3 +251,27 @@ Acceptance criteria:
     - the prompt-stage baseline collapsed by roughly `28.92 GiB`
     - maximum RSS improved by about `4.26 GiB`
     - peak memory footprint stayed effectively flat, so the remaining issue moved cleanly to the denoising load boundary rather than disappearing
+- Phase 2: completed on March 8, 2026.
+  - Scope landed:
+    - add `transformer.denoising-load.after-apply` telemetry
+    - add `controlnet.denoising-load.after-apply` telemetry
+    - keep runtime behavior otherwise unchanged from phase 1
+  - Phase 2 high-resolution memory probe:
+    - `prompt-embeddings.after-clear-cache`: resident `5.78 GiB`, active `2.50 MiB`, cache `0 B`
+    - `control-context.after-baseline-reduction`: resident `1003.34 MiB`, active `67.87 MiB`, cache `0 B`
+    - `control-context.after-clear-cache`: resident `314.61 MiB`, active `71.36 MiB`, cache `0 B`
+    - `transformer.denoising-load.after-apply`: resident `23.24 GiB`, active `22.93 GiB`, cache `65.30 MiB`
+    - `controlnet.denoising-load.after-apply`: resident `29.49 GiB`, active `29.19 GiB`, cache `65.30 MiB`
+    - `denoising.before-start`: resident `29.49 GiB`, active `29.19 GiB`, cache `65.30 MiB`
+    - `decode.after-eval`: resident `414.14 MiB`, active `127.48 MiB`, cache `39.00 GiB`, MLX peak `32.67 GiB`
+    - `/usr/bin/time -l` maximum resident set size: `38,378,668,032` bytes
+    - `/usr/bin/time -l` peak memory footprint: `59,320,278,272` bytes
+  - Phase 2 fixed-seed quality probe:
+    - output SHA-256: `b5f1585314323c7e12f3a4871644346ac9d5f2470cfbf74c11935e9f2c558b98`
+    - phase 2 vs phase 1 MAE: `0.0000`
+    - phase 2 vs phase 1 max absolute pixel delta: `0`
+    - phase 2 vs phase 1 PSNR: `inf`
+  - Assessment:
+    - the new markers show the remaining rise is the denoiser modules themselves, not latent control-context residue
+    - memory and quality stayed effectively unchanged from phase 1
+    - this closes the attribution question cleanly enough to stop before phase 3

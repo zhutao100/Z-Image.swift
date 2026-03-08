@@ -58,13 +58,14 @@ The March 8, 2026 phase 1 follow-up work changed the control lifecycle to this:
 4. load transformer and optional ControlNet right before denoising
 
 That means the old early-load complaint is no longer current.
-The remaining practical issue is narrower:
+Phase 2 telemetry on March 8, 2026 also makes the remaining issue narrower and more concrete:
 
-- the deferred denoising load boundary still climbs back to about `29.5 GiB` resident before the first denoising step
-- peak memory footprint stays around `59.3 GiB` even after the prompt-stage baseline drops sharply
+- `transformer.denoising-load.after-apply`: resident `23.24 GiB`, active `22.93 GiB`
+- `controlnet.denoising-load.after-apply`: resident `29.49 GiB`, active `29.19 GiB`
+- `denoising.before-start`: resident `29.49 GiB`, active `29.19 GiB`
 
 So the remaining question is not whether eager loading can be removed. It can, and it was.
-The remaining question is whether the denoising load boundary itself can be reduced or attributed more precisely.
+The remaining question is whether the denoising load boundary itself can ever be reduced materially without changing denoiser residency policy.
 
 ### 4. Diffusers parity is still about math, not lifecycle
 
@@ -100,8 +101,10 @@ After phase 3, the measured high-resolution reference run still peaks around `59
 
 The remaining practical questions are:
 
-- how much of the remaining `~29.5 GiB` denoising-start residency is unavoidable model residency versus lifecycle overhead
-- whether tighter telemetry can isolate the residual jump cleanly enough to justify any further loader surgery
-- whether tiled control and inpaint VAE encode is worth attempting once it is clear that it will not move the denoising-boundary peak by itself
+- whether any further denoiser-residency reduction is possible without changing module offload policy or model structure
+- whether there is any realistic next step that can lower the `~59.3 GiB` peak footprint more than phase 1 already did
+
+For now, tiled control and inpaint VAE encode is not the right next step.
+Phase 2 shows that control-context construction is no longer the limiter for this workload.
 
 The follow-up execution plan lives in `docs/dev_plans/controlnet-memory-followup.md`.

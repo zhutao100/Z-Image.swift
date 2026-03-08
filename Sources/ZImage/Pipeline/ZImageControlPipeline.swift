@@ -988,6 +988,7 @@ public class ZImageControlPipeline {
         logger: logger
       )
       transformer = transformerModel
+      logControlMemory("transformer.denoising-load.after-apply", enabled: logPhaseMemory)
       controlnet = nil
       loadedControlnetWeightsId = nil
       if let controlnetSpec = request.controlnetWeights {
@@ -999,6 +1000,7 @@ public class ZImageControlPipeline {
           preferredFile: request.controlnetWeightsFile,
           progressCallback: request.progressCallback
         )
+        logControlMemory("controlnet.denoising-load.after-apply", enabled: logPhaseMemory)
       }
       if let loraConfig = request.lora {
         try await applyLoRAIfNeeded(loraConfig)
