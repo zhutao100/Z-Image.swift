@@ -1,311 +1,115 @@
-I inspected the current Swift code path and compared it against the upstream Diffusers control pipeline and current backend memory docs. I did **not** run the model here, so this is a **source-based diagnosis**, but the code evidence is strong.
+# ControlNet Memory Analysis
 
-## Diagnosis
+This note was originally written before the March 7, 2026 control-path remediation phases.
+It was pruned on March 8, 2026 so that it keeps only the observations that are still accurate and relevant after phases 1 through 3 landed.
 
-The surge is **primarily triggered by control-context construction**, not by the final stored `control_context` tensor.
+Use this as a narrow ControlNet-specific follow-up note.
+For the validated phase-by-phase measurements and the fixes that already landed, see:
 
-For your exact run, the hot path is:
+- `docs/debug_notes/control-context-memory-remediation.md`
+- `docs/dev_plans/control-context-memory-remediation.md`
 
-* `ZImageControlPipeline.generateCore(...)`
-* `buildControlContext(...)`
-* `encodeImageToLatents(...)`
-* `vae.encode(normalized)`
+## Validation Basis
 
-in:
+- Current source inspection of:
+  - `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
+  - `Sources/ZImage/Model/VAE/AutoencoderEncoder.swift`
+  - `Sources/ZImage/Model/VAE/AutoencoderKL.swift`
+  - `Sources/ZImage/Model/Transformer/ZImageControlTransformer2D.swift`
+- Current measured state from the phase 3 remediation outcome in:
+  - `docs/debug_notes/control-context-memory-remediation.md`
+- Local Diffusers reference source inspection:
+  - `~/workspace/custom-builds/diffusers/src/diffusers/pipelines/z_image/pipeline_z_image_controlnet.py`
 
-* `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:369-392`
-* `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:440-531`
-* `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:900-926`
+No new model run was performed for this cleanup pass.
+Any statement below is source-based unless it explicitly cites the measured phase 3 state.
 
-### 1) The final control tensor is tiny; the spike happens while building it
+## Still-Relevant Findings
 
-Your log shows:
+### 1. The stored control-context tensor is still not the memory problem
 
-* `Control context built, shape: [1, 33, 1, 288, 192]`
+The final control-context tensor remains small relative to the observed process footprint.
 
-That tensor is only:
+The measured high-resolution reference run in `control-context-memory-remediation.md` still ends with:
 
-* `1 * 33 * 1 * 288 * 192 = 1,824,768` elements
-* about **3.5 MiB in BF16**
-* about **7.0 MiB in FP32**
+- control-context shape: `[1, 33, 1, 288, 192]`
+- phase 3 peak memory footprint: `59,328,863,512` bytes
 
-So the 100 GB-looking jump is **not** from retaining the final tensor.
+That means the remaining issue is still dominated by how control context is built and how the control denoiser runs, not by the size of the tensor that is ultimately stored.
 
-### 2) The dominant trigger is the **full-resolution VAE encoder path**
+### 2. Full-resolution control and inpaint VAE encode remain the main build-time hotspot
 
-For pure control mode, current Swift does exactly this:
+The current control path still builds control latents by resizing the full input image and then running a monolithic VAE encode:
 
-```swift
-let imageArray = try QwenImageIO.resizedPixelArray(... dtype: vaeDType)
-let normalized = QwenImageIO.normalizeForEncoder(imageArray)
-let encodedLatents = vae.encode(normalized)
-```
+- `encodeImageToLatents(...)` calls `vae.encode(normalized)`
+- the inpaint branch in `buildControlContext(...)` also calls `vae.encode(maskedNormalized)`
 
-That is in `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:377-392`.
+The encoder-only VAE split reduced residency pressure, but it did not change the fact that control and inpaint inputs are still encoded at full requested resolution in one pass.
 
-For your requested `1536 x 2304`, the control VAE latent grid is:
+There is still no tiled or striped control-image VAE encode path in the current Swift repo.
 
-* `latentH = 2304 / 8 = 288`
-* `latentW = 1536 / 8 = 192`
+### 3. The control pipeline still pays unnecessary load and reload churn, but ControlNet deferral is not yet quality-safe
 
-So the VAE mid-block attention runs on:
+The current lifecycle is leaner than the original implementation, but it still does this:
 
-* `288 * 192 = 55,296` tokens
+1. load tokenizer, transformer, and optional ControlNet weights
+2. load text encoder and build prompt embeddings
+3. unload transformer and ControlNet before `buildControlContext(...)`
+4. build control context
+5. reload transformer and optional ControlNet before denoising
 
-The current VAE attention implementation is chunked, but it is still operating on very large tensors:
+So the old "full `AutoencoderKL` is loaded too early" claim is obsolete, but the more general load-order problem is still present:
 
-* `Sources/ZImage/Model/VAE/AutoencoderKL.swift:51-103`
-* `Sources/ZImage/Model/VAE/AutoencoderKL.swift:123-145`
+- transformer and ControlNet are still loaded before prompt encoding even though they are not needed there
+- transformer and ControlNet are still reloaded after control-context construction
 
-This means the code is no longer suffering from the earlier “accidental fp32 control-image path” issue; that was already fixed. The remaining problem is more structural: **large encoder activations + large attention workspaces + retained cache/workspace**.
+This remains the most plausible remaining source of avoidable baseline pressure and latency churn outside the VAE encode itself.
 
-### 3) Control mode has a much higher baseline than non-control mode even before the spike
+March 8, 2026 follow-up:
 
-This matters for your comparison against normal mode.
+- deferring both transformer and ControlNet reduced prompt-stage residency sharply but changed the fixed-seed output
+- deferring only ControlNet reproduced the same output drift while leaving peak memory footprint effectively unchanged
 
-The **normal** pipeline loads a **decoder-only VAE**:
+That means the pipeline is still lifecycle-sensitive around ControlNet loading.
+The open task is no longer "just defer ControlNet", but "explain why ControlNet deferral changes output, then revisit deferral only if that root cause is removed."
 
-* `Sources/ZImage/Pipeline/ZImagePipeline.swift:172-185`
+### 4. Diffusers parity is still about math, not lifecycle
 
-The **control** pipeline loads the **full AutoencoderKL** (encoder + decoder):
+The local Diffusers control pipeline still follows the same high-level control-image semantics:
 
-* `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:306-320`
+- preprocess control image
+- run VAE encode
+- shift and scale into latent space
+- add the singleton frame dimension for ControlNet context
 
-So control mode is inherently carrying more VAE memory than normal mode. Then it also loads transformer + controlnet on top:
+So the remaining Swift gap is not about having invented the wrong control algorithm.
+It is about lifecycle policy and optional memory-management tools around that algorithm.
 
-* `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:722-780`
+The two notable tools still missing on the Swift side are:
 
-That explains why your baseline is already ~20 GB before text encoding, whereas normal mode is materially lighter.
+- tiled control and inpaint VAE encode
+- a more aggressive deferred-loading or offload policy for ControlNet-specific modules
 
-### 4) The current load order is inefficient and amplifies peak memory
+## What Is No Longer Current
 
-Right now the control pipeline:
+The original version of this note also recommended several changes that are now already implemented and should not be treated as open work:
 
-1. loads full VAE
-2. loads transformer
-3. loads controlnet
-4. loads text encoder
-5. encodes prompt
-6. **unloads transformer/controlnet**
-7. builds control context with VAE encode
-8. **reloads transformer/controlnet**
+- post-build cache barrier after control-context materialization
+- full-lifecycle `AutoencoderKL` residency in the control pipeline
+- repeated `MLX.stacked(allC, axis: 0)` hint transport inside the control transformer blocks
 
-That is visible in:
+Those are now part of the current repo state and the measured remediation history.
 
-* preload: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:722-780`
-* unload before control build: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:904-909`
-* reload after control build: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:960-986`
+## Remaining Practical Question
 
-So the code is doing avoidable memory churn: it pays the cost of loading the heaviest modules early, only to unload them for control-context construction, then load them again.
+After phase 3, the measured high-resolution reference run still peaks around `59.3 GiB`.
 
-This is likely why your text-encoder phase climbs from ~20 GB to ~30 GB: the text encoder is being loaded **on top of** full VAE + transformer + controlnet residency.
+The remaining practical questions are:
 
-### 5) There is still no hard cache-release barrier after control-context build
+- why deferring ControlNet loading changes the fixed-seed output even when the control math and weights are otherwise unchanged
+- how much prompt-stage baseline reduction remains available once that lifecycle sensitivity is understood
 
-After the control context is built, current code does:
+Only after that is understood does it make sense to revisit deferred loading.
+If deferred loading remains blocked, tiled control and inpaint VAE encode should be judged against the measured peak-memory target rather than treated as an automatic next step.
 
-```swift
-let result = try buildControlContext(...)
-MLX.eval(result)
-logControlMemory("control-context.after-eval", ...)
-controlContext = result.asType(vae.dtype)
-```
-
-But it does **not** call `Memory.clearCache()` there before transformer/controlnet reload.
-
-That is `Sources/ZImage/Pipeline/ZImageControlPipeline.swift:912-925`.
-
-This is important because the visible “memory footprint” in Apple tools is not the same as just “live tensor bytes.” Apple’s memory-footprint accounting includes dirty, compressed, and swapped pages, and on Apple silicon it includes GPU objects as part of the process footprint. PyTorch’s MPS docs also distinguish “tensor memory” from total driver allocation, with the latter explicitly including cached allocator pools and MPS/MPSGraph allocations. ([Apple Developer][1])
-
-So even if the live tensor graph after control build is small, **retained MLX/Metal cache/workspace can still keep Activity Monitor very high**, especially right before heavy modules are reloaded.
-
-### 6) Even after the build phase, control denoising is intrinsically heavier than normal denoising
-
-The control path repeatedly grows stacked hint tensors through `MLX.stacked(allC, axis: 0)`:
-
-* `Sources/ZImage/Model/Transformer/ZImageControlTransformerBlock.swift:111-145`
-
-and it does that across:
-
-* 15 control layers
-* 2 control refiner layers
-
-from:
-
-* `Sources/ZImage/Model/Transformer/ZImageControlTransformer2D.swift:19-20`
-
-At your latent size, the image-token count is:
-
-* `(288 / 2) * (192 / 2) = 13,824`
-
-With hidden size `3840`, a single BF16 `[batch, seq, dim]` hidden state is about **100 MiB**. Once the control blocks grow stacked tensors like `[num_hints, batch, seq, dim]`, transient memory gets into the **multi-GiB** range very quickly. This is a real steady-state control-mode overhead that normal mode does not pay.
-
-## Comparison with Diffusers
-
-The upstream Diffusers Z-Image ControlNet pipeline uses the **same high-level algorithm** for the control image: preprocess image, run `vae.encode(control_image)`, rescale latents, then feed them to ControlNet. So the Swift port is not wrong in principle here. ([GitHub][2])
-
-Two differences matter, though:
-
-* Diffusers has documented **tiled VAE encode/decode** support; its `tiled_encode` is explicitly described as splitting the input into overlapping tiles to keep memory use stable with image size. ([Hugging Face][3])
-* Diffusers also documents CPU/model offloading to reduce memory usage by moving components on and off device only when needed. ([Hugging Face][4])
-
-So the Swift port is matching the reference math, but it does **not** yet have the same mature memory-management toolbox.
-
-## What is **not** the root cause
-
-These earlier hypotheses are no longer the main issue in the current code:
-
-* **Hard-coded fp32 control image inputs**: fixed for the control encode path; current code uses `dtype: vae.dtype`.
-* **Transformer/controlnet still resident during control build**: current code does unload them before `buildControlContext(...)`.
-* **Final `control_context` tensor too large**: false; it is tiny.
-
-## Highest-value improvement options
-
-### A. Add a hard cache barrier immediately after control-context build
-
-This is the first change I would make.
-
-Right after control-context materialization:
-
-```swift
-let result = try buildControlContext(...)
-controlContext = result.asType(vae.dtype)
-MLX.eval(controlContext)
-Memory.clearCache()
-logControlMemory("control-context.after-clear-cache", enabled: logPhaseMemory)
-```
-
-Why this is high ROI:
-
-* minimal code change
-* directly targets the most plausible reason Activity Monitor remains inflated
-* gives you an immediate validation point with `--log-control-memory`
-
-### B. Reorder lifecycle so transformer/controlnet are loaded **after** prompt encoding and control-context build
-
-Current order is wasteful. Better order:
-
-1. tokenizer
-2. full VAE encoder path or encoder-only VAE
-3. text encoder
-4. prompt embeddings
-5. build control context
-6. clear cache
-7. load transformer
-8. load controlnet
-9. denoise
-10. unload transformer/controlnet
-11. decode
-
-That should reduce:
-
-* the ~20 GB baseline before text encoding
-* the ~20 → 30 GB text-encoder climb
-* load/unload/reload churn
-
-### C. Split VAE into **encoder-only** for control build and **decoder-only** for final decode
-
-This is the most structurally correct fix.
-
-Normal mode already benefits from decoder-only VAE residency. Control mode should do something similar:
-
-* transient **encoder-only** VAE for `buildControlContext(...)`
-* persistent **decoder-only** VAE for final decode
-
-That removes encoder residency from the denoising/decode phases and makes control mode much closer to normal mode’s memory profile.
-
-### D. Add tiled VAE encode for control/inpaint images
-
-This is the strongest fix for the actual build spike.
-
-Diffusers documents tiled encode specifically as a way to keep memory use stable as image size grows. ([Hugging Face][3])
-
-This is the right answer if you want to keep supporting very large control images without huge transient peaks.
-
-Tradeoff:
-
-* more implementation complexity
-* some risk of tile-boundary artifacts unless overlap/blending is done carefully
-* slight output mismatch versus monolithic encode
-
-### E. Refactor control hint transport to avoid growing `stacked(allC)` tensors
-
-This targets denoising memory, not the build spike.
-
-Current design repeatedly carries a growing stacked tensor through control blocks. A leaner design would:
-
-* keep only the latest control state
-* emit a hint for the current target layer
-* store required hints in a dictionary or preallocated buffer
-* avoid repeatedly re-stacking prior hints as a leading dimension
-
-That will not fix the control-context build surge, but it should reduce the gap between control mode and normal mode during denoising.
-
-### F. Optional: add offload / quantization policies for control-specific modules
-
-Secondary options:
-
-* model-offload-like lifecycle for text encoder / controlnet
-* quantized text encoder path
-* quantized controlnet path if quality stays acceptable
-
-These are valid, but I would do them **after** A/B/C.
-
-## My priority order
-
-1. **Post-build `Memory.clearCache()` barrier + telemetry marker**
-2. **Lifecycle reorder to defer transformer/controlnet load**
-3. **Encoder-only / decoder-only VAE split**
-4. **Tiled VAE encode**
-5. **Control hint-stack refactor**
-
-## What I would measure next
-
-Use the existing probe:
-
-```bash
-.build/xcode/Build/Products/Release/ZImageCLI control \
-  --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors \
-  --control-image "[control_image_path]" \
-  --width 1536 \
-  --height 2304 \
-  --prompt "[prompt]" \
-  --negative-prompt "[negative_prompt]" \
-  --steps 1 \
-  --log-control-memory \
-  --output /tmp/zimage-control-test.png
-```
-
-Then add two extra markers:
-
-* `control-context.after-clear-cache`
-* `transformer-controlnet.after-reload`
-
-Interpretation:
-
-* if `after-eval` is huge and `after-clear-cache` drops sharply, cache retention is a major amplifier
-* if the peak still occurs inside `buildControlContext(...)` before the clear, then VAE encode itself is the dominant spike
-* if denoising remains much heavier than normal mode even after that, the `stacked(allC)` design is the next target
-
-## Bottom line
-
-The most likely root-cause stack is:
-
-1. **full-resolution VAE encoder work** during control-context build
-2. **retained MLX/Metal cache/workspace** because there is no post-build cache barrier
-3. **unnecessarily high baseline and churn** from loading transformer/controlnet before they are needed
-4. **extra control-mode denoising overhead** from stacked hint tensors
-
-So the fastest credible improvement is **not** another dtype tweak. It is:
-
-* **flush cache after control-context build**
-* **defer transformer/controlnet loading**
-* then move to **encoder/decoder VAE split** and **tiled control encode**
-
-That is where I would focus engineering effort.
-
-[1]: https://developer.apple.com/documentation/xcode/analyzing-the-memory-usage-of-your-metal-app?utm_source=chatgpt.com "Analyzing the memory usage of your Metal app"
-[2]: https://raw.githubusercontent.com/huggingface/diffusers/refs/heads/main/src/diffusers/pipelines/z_image/pipeline_z_image_controlnet.py "raw.githubusercontent.com"
-[3]: https://huggingface.co/docs/diffusers/en/api/models/autoencoderkl "AutoencoderKL"
-[4]: https://huggingface.co/docs/diffusers/optimization/memory?utm_source=chatgpt.com "Reduce memory usage"
+The follow-up execution plan lives in `docs/dev_plans/controlnet-memory-followup.md`.
