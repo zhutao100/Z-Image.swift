@@ -75,7 +75,7 @@ This uses the Qwen text encoder in “LLM mode” to rewrite the prompt before g
   --prompt "A hyper-realistic close-up portrait of a leopard" \
   --control-image /path/to/canny_edges.jpg \
   --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors \
+  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
   --control-scale 0.75 \
   --output leopard.png
 ```
@@ -85,7 +85,7 @@ For inpainting, provide `--inpaint-image` and `--mask`:
 ```bash
 ./ZImageCLI control -p "a dancer" -c pose.jpg -i photo.jpg --mask mask.png \
   --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors --cs 0.75 -s 25
+  --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors --cs 0.75 -s 25
 ```
 
 Run `./ZImageCLI control --help` for the complete option list and control image expectations.
@@ -108,7 +108,7 @@ Quantize ControlNet weights:
 
 ```bash
 ./ZImageCLI quantize-controlnet -i alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --file Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors -o controlnet-2.1-q8 --verbose
+  --file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors -o controlnet-2.1-q8 --verbose
 ```
 
 After quantization, point `--model` (or `--controlnet-weights`) at the output directory.

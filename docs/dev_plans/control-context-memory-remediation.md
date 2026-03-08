@@ -31,7 +31,7 @@ High-resolution memory probe:
   --prompt "memory validation" \
   --control-image images/canny.jpg \
   --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors \
+  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
   --width 1536 \
   --height 2304 \
   --steps 1 \
@@ -49,7 +49,7 @@ Fixed-seed quality probe:
   --prompt "a stone archway covered in moss, cinematic lighting" \
   --control-image images/canny.jpg \
   --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors \
+  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
   --width 512 \
   --height 512 \
   --steps 4 \

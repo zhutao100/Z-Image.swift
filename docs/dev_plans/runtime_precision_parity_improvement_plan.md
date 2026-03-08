@@ -41,7 +41,7 @@ Control parity probe:
 
 - base model: `Tongyi-MAI/Z-Image-Turbo`
 - control weights: `alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1`
-- control file: `Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors`
+- control file: `Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors`
 - control image: `images/canny.jpg`
 - prompt: `a stone archway covered in moss, cinematic lighting`
 - width/height: `512x512`

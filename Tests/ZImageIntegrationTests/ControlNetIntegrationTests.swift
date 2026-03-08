@@ -64,7 +64,7 @@ import XCTest
         outputPath: tempOutput,
         model: "mzbac/z-image-turbo-8bit",
         controlnetWeights: "alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1",
-        controlnetWeightsFile: "Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors"
+        controlnetWeightsFile: "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"
       )
 
       let outputURL = try await pipeline.generate(request)
@@ -88,7 +88,7 @@ import XCTest
         outputPath: tempOutput,
         model: "mzbac/z-image-turbo-8bit",
         controlnetWeights: "alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1",
-        controlnetWeightsFile: "Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors"
+        controlnetWeightsFile: "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"
       )
 
       let outputURL = try await pipeline.generate(request)
@@ -112,7 +112,7 @@ import XCTest
         outputPath: tempOutput,
         model: "mzbac/z-image-turbo-8bit",
         controlnetWeights: "alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1",
-        controlnetWeightsFile: "Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors"
+        controlnetWeightsFile: "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"
       )
 
       let outputURL = try await pipeline.generate(request)
@@ -148,7 +148,7 @@ import XCTest
         outputPath: tempOutput,
         model: "mzbac/z-image-turbo-8bit",
         controlnetWeights: "alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1",
-        controlnetWeightsFile: "Z-Image-Turbo-Fun-Controlnet-Union-2.1-8steps.safetensors"
+        controlnetWeightsFile: "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"
       )
 
       let outputURL = try await pipeline.generate(request)
