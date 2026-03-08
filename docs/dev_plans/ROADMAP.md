@@ -4,15 +4,15 @@ This is the short, current priority list for the repo. It is intentionally small
 
 ## Near Term
 
-1. **Apply model-aware presets in the CLI**
-   - The library has Turbo vs Base presets, but the CLI still boots with Turbo-oriented defaults even when `--model Tongyi-MAI/Z-Image` is selected.
-2. **Reduce duplicated loading and denoising logic**
+1. **Reduce duplicated loading and denoising logic**
    - The main overlap is still between `ZImagePipeline` and `ZImageControlPipeline`, plus the base/control transformer variants.
-3. **Improve CLI ergonomics**
+2. **Improve CLI ergonomics**
    - Better validation and clearer errors for missing required flags and bad values
    - Revisit whether manual parsing in `Sources/ZImageCLI/main.swift` is still worth keeping
-4. **Tighten model-resolution UX**
+3. **Tighten model-resolution UX**
    - Clearer feedback for local-path mistakes, auth failures, and `--weights-variant` mismatches
+4. **Harden local-path Base ergonomics**
+   - Known `Tongyi-MAI` ids now get Base-aware presets, but local Base directories and unknown aliases still require explicit sampling flags
 
 ## Follow-On Work
 

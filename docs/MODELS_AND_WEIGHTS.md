@@ -164,6 +164,8 @@ For the built-in `Tongyi-MAI/Z-Image` id, the CLI now applies Base-friendly defa
 
 If you point `--model` at a local Base snapshot or another unknown alias, the CLI cannot identify it as Base ahead of load time and will keep the Turbo-compatible preset unless you set `--steps` and `--guidance` explicitly.
 
+For repo-side regression checking against the real Base checkpoint, there is also an opt-in Base smoke test in `Tests/ZImageIntegrationTests/PipelineIntegrationTests.swift`; see [DEVELOPMENT.md](DEVELOPMENT.md) for the invocation.
+
 ### Offline Reuse
 
 Once a snapshot has been downloaded into the Hugging Face cache, reruns can reuse it without downloading again.

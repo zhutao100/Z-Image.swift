@@ -245,9 +245,11 @@ public final class ZImageTransformer2DModel: Module {
 
     var capFeat = promptEmbeds
     if cached.capPad > 0 {
-      let last = promptEmbeds[0..., capOriLen - 1, 0...]
-      let pad = MLX.broadcast(last, to: [batch, cached.capPad, promptEmbeds.dim(2)])
-      capFeat = MLX.concatenated([promptEmbeds, pad], axis: 1)
+      capFeat = padSequenceByRepeatingLastToken(
+        promptEmbeds,
+        validLength: capOriLen,
+        padLength: cached.capPad
+      )
     }
     capFeat = capEmbedLinear(capEmbedNorm(capFeat))
 
@@ -264,9 +266,11 @@ public final class ZImageTransformer2DModel: Module {
       .reshaped(batch, cached.imageTokens, patchSize * patchSize * fPatchSize * channels)
 
     if cached.imgPad > 0 {
-      let last = image[0..., cached.imageTokens - 1, 0...]
-      let pad = MLX.broadcast(last, to: [batch, cached.imgPad, image.dim(2)])
-      image = MLX.concatenated([image, pad], axis: 1)
+      image = padSequenceByRepeatingLastToken(
+        image,
+        validLength: cached.imageTokens,
+        padLength: cached.imgPad
+      )
     }
 
     image = xEmbed(image)

@@ -50,6 +50,23 @@ Heavier test suites are opt-in:
 
 Use those only when the task specifically needs them.
 
+### Opt-In Base Smoke Test
+
+For a real-model Base sanity check without enabling the full integration suite by default:
+
+```bash
+scripts/build_mlx_metallib.sh -c debug
+ZIMAGE_RUN_BASE_SMOKE=1 \
+ZIMAGE_BASE_SMOKE_MODEL="$HOME/.cache/huggingface/hub/models--Tongyi-MAI--Z-Image/snapshots/04cc4abb7c5069926f75c9bfde9ef43d49423021" \
+swift test --filter PipelineIntegrationTests/testBaseModelSmokeGeneration
+```
+
+Notes:
+
+- `ZIMAGE_RUN_BASE_SMOKE=1` is required; otherwise the test skips.
+- `ZIMAGE_BASE_SMOKE_MODEL` is optional. When omitted, the test uses `Tongyi-MAI/Z-Image` and resolves it through the normal cache/download path.
+- If you run the test through SwiftPM, keep `mlx.metallib` available via `scripts/build_mlx_metallib.sh` first.
+
 ## CI And Packaging
 
 Current CI behavior:

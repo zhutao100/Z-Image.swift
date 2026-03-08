@@ -65,4 +65,49 @@ final class QwenEncoderAttentionMaskTests: XCTestCase {
 
     XCTAssertEqual(actual, expected)
   }
+
+  func testProcessTextEmbeddingsPadsBatchToLongestValidLength() {
+    let hiddenStates = MLXArray(
+      [
+        Float(1), 10,
+        2, 20,
+        3, 30,
+        4, 40,
+        5, 50,
+        6, 60,
+        7, 70,
+        8, 80,
+      ],
+      [2, 4, 2]
+    )
+    let attentionMask = MLXArray(
+      [
+        Int32(1), 1, 1, 0,
+        1, 0, 0, 0,
+      ],
+      [2, 4]
+    )
+
+    let (embeddings, mask) = QwenTextEncoder.processTextEmbeddings(
+      hiddenStates: hiddenStates,
+      attentionMask: attentionMask,
+      dropIndex: 0
+    )
+
+    XCTAssertEqual(embeddings.shape, [2, 3, 2])
+    XCTAssertEqual(mask.shape, [2, 3])
+
+    let maskValues = mask.asArray(Int32.self)
+    XCTAssertEqual(maskValues, [1, 1, 1, 1, 0, 0])
+
+    let embeddingValues = embeddings.asArray(Float.self)
+    XCTAssertEqual(embeddingValues[0], 1.0, accuracy: 1e-6)
+    XCTAssertEqual(embeddingValues[1], 10.0, accuracy: 1e-6)
+    XCTAssertEqual(embeddingValues[4], 3.0, accuracy: 1e-6)
+    XCTAssertEqual(embeddingValues[5], 30.0, accuracy: 1e-6)
+    XCTAssertEqual(embeddingValues[6], 5.0, accuracy: 1e-6)
+    XCTAssertEqual(embeddingValues[7], 50.0, accuracy: 1e-6)
+    XCTAssertEqual(embeddingValues[10], 0.0, accuracy: 1e-6)
+    XCTAssertEqual(embeddingValues[11], 0.0, accuracy: 1e-6)
+  }
 }

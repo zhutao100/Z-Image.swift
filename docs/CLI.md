@@ -197,4 +197,6 @@ After quantization, point `--model` or `--controlnet-weights` at the output dire
 - `--no-progress`: suppress progress reporting
 - `ZImageCLI control --log-control-memory`: log process-resident and MLX memory markers around prompt encoding, control-context construction, denoiser loading, and decode
 
+The repo also keeps an opt-in real-model Base smoke test for regression checking. The exact command lives in [DEVELOPMENT.md](DEVELOPMENT.md).
+
 For the underlying control-memory policy and validation recipe, see [DEVELOPMENT.md](DEVELOPMENT.md).

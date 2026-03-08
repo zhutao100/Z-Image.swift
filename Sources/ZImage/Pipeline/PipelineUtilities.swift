@@ -31,6 +31,29 @@ public enum PipelineUtilities {
     return (embedsBatch, mask)
   }
 
+  public static func encodePromptPair(
+    prompt: String,
+    negativePrompt: String,
+    tokenizer: QwenTokenizer,
+    textEncoder: QwenTextEncoder,
+    maxLength: Int
+  ) throws -> (promptEmbeddings: MLXArray, negativeEmbeddings: MLXArray) {
+    let encoded = try tokenizer.encodeChat(prompts: [prompt, negativePrompt], maxLength: maxLength)
+    let embeddingsList = textEncoder.encodeForZImage(
+      inputIds: encoded.inputIds,
+      attentionMask: encoded.attentionMask
+    )
+
+    guard embeddingsList.count == 2 else {
+      throw UtilityError.emptyEmbeddings
+    }
+
+    return (
+      promptEmbeddings: embeddingsList[0].expandedDimensions(axis: 0),
+      negativeEmbeddings: embeddingsList[1].expandedDimensions(axis: 0)
+    )
+  }
+
   public static func decodeLatents(
     _ latents: MLXArray,
     vae: VAEImageDecoding,

@@ -102,6 +102,8 @@ Environment variables:
 
 The authoritative details for model resolution, cache lookup, AIO checkpoints, quantization manifests, and ControlNet weight loading live in [docs/MODELS_AND_WEIGHTS.md](docs/MODELS_AND_WEIGHTS.md).
 
+For repo-side regression checking against the real Base checkpoint, use the opt-in smoke test documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
 ## Current Limitations
 
 - Model-aware CLI defaults currently key off the known `Tongyi-MAI` ids. Local paths and unknown aliases still fall back to Turbo-compatible defaults unless you set `--steps` and `--guidance` explicitly.

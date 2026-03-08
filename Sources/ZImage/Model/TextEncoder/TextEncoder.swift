@@ -114,37 +114,25 @@ public final class QwenTextEncoder: Module {
       outputHiddenStates: true
     )
 
-    guard let allHiddenStates = result.hiddenStates, allHiddenStates.count >= 2 else {
-      return [result.lastHiddenState]
+    let sourceHiddenStates: MLXArray
+    if let allHiddenStates = result.hiddenStates, allHiddenStates.count >= 2 {
+      sourceHiddenStates = allHiddenStates[allHiddenStates.count - 2]
+    } else {
+      sourceHiddenStates = result.lastHiddenState
     }
 
-    // Get second-to-last hidden state (before final norm)
-    let secondToLast = allHiddenStates[allHiddenStates.count - 2]
+    let (promptEmbeds, _) = QwenTextEncoder.processTextEmbeddings(
+      hiddenStates: sourceHiddenStates,
+      attentionMask: attentionMask,
+      dropIndex: 0
+    )
 
-    // Extract only the valid (non-padding) tokens for each batch item
-    let batchSize = secondToLast.dim(0)
+    let batchSize = promptEmbeds.dim(0)
     var embeddingsList: [MLXArray] = []
     embeddingsList.reserveCapacity(batchSize)
-
     for i in 0..<batchSize {
-      let batchEmbeds = secondToLast[i]
-
-      if let mask = attentionMask {
-        MLX.eval(mask)
-        let batchMask = mask[i].asArray(Int32.self)
-        let validCount = batchMask.filter { $0 != 0 }.count
-
-        if validCount > 0 && validCount < batchMask.count {
-          let validEmbeds = batchEmbeds[0..<validCount]
-          embeddingsList.append(validEmbeds)
-        } else {
-          embeddingsList.append(batchEmbeds)
-        }
-      } else {
-        embeddingsList.append(batchEmbeds)
-      }
+      embeddingsList.append(promptEmbeds[i])
     }
-
     return embeddingsList
   }
 

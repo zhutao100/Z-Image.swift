@@ -45,6 +45,11 @@ final class PipelineIntegrationTests: XCTestCase {
     super.tearDown()
   }
 
+  override func setUpWithError() throws {
+    try super.setUpWithError()
+    try ensureMLXMetalLibraryColocated(for: type(of: self))
+  }
+
   /// Get the shared pipeline or skip test if not available
   private func getPipeline() throws -> ZImagePipeline {
     guard let pipeline = Self.sharedPipeline else {
@@ -202,6 +207,33 @@ final class PipelineIntegrationTests: XCTestCase {
     XCTAssertEqual(fileSignature, pngSignature, "Output should be a valid PNG file")
   }
 
+  func testBaseModelSmokeGeneration() async throws {
+    try skipIfNoGPU()
+    let modelSpec = try baseSmokeModelSpec()
+    let pipeline = try getPipeline()
+
+    let tempOutput = Self.outputDir.appendingPathComponent("test_base_smoke.png")
+    let request = ZImageGenerationRequest(
+      prompt: "a black tiger in a bamboo forest",
+      width: 256,
+      height: 256,
+      steps: 4,
+      guidanceScale: 4.0,
+      outputPath: tempOutput,
+      model: modelSpec,
+      maxSequenceLength: 256
+    )
+
+    let outputURL = try await pipeline.generate(request)
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+
+    let data = try Data(contentsOf: outputURL)
+    let pngSignature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    let fileSignature = [UInt8](data.prefix(8))
+    XCTAssertEqual(fileSignature, pngSignature, "Base smoke output should be a valid PNG file")
+  }
+
   // MARK: - Prompt Enhancement Tests
 
   func testPromptEnhancement() async throws {
@@ -261,6 +293,22 @@ final class PipelineIntegrationTests: XCTestCase {
   }
 
   // MARK: - Helper Functions
+
+  private func baseSmokeModelSpec() throws -> String {
+    let env = ProcessInfo.processInfo.environment
+    let enabled = env["ZIMAGE_RUN_BASE_SMOKE"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard enabled == "1" || enabled == "true" || enabled == "yes" else {
+      throw XCTSkip("Set ZIMAGE_RUN_BASE_SMOKE=1 to enable the opt-in Base smoke test.")
+    }
+
+    if let override = env["ZIMAGE_BASE_SMOKE_MODEL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !override.isEmpty
+    {
+      return override
+    }
+
+    return ZImageKnownModel.zImage.id
+  }
 
   private func skipIfNoGPU() throws {
     // Check if running in CI without GPU

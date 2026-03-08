@@ -770,17 +770,21 @@ public final class ZImagePipeline {
         Memory.clearCache()
       }
 
-      let (pe, _) = try encodePrompt(
-        finalPrompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: request.maxSequenceLength)
-      promptEmbeds = pe
-
       if doCFG {
-        let (ne, _) = try encodePrompt(
-          request.negativePrompt ?? "", tokenizer: tokenizer, textEncoder: textEncoder,
-          maxLength: request.maxSequenceLength)
-        negativeEmbeds = ne
-        MLX.eval(promptEmbeds, ne)
+        let pair = try PipelineUtilities.encodePromptPair(
+          prompt: finalPrompt,
+          negativePrompt: request.negativePrompt ?? "",
+          tokenizer: tokenizer,
+          textEncoder: textEncoder,
+          maxLength: request.maxSequenceLength
+        )
+        promptEmbeds = pair.promptEmbeddings
+        negativeEmbeds = pair.negativeEmbeddings
+        MLX.eval(promptEmbeds, pair.negativeEmbeddings)
       } else {
+        let (pe, _) = try encodePrompt(
+          finalPrompt, tokenizer: tokenizer, textEncoder: textEncoder, maxLength: request.maxSequenceLength)
+        promptEmbeds = pe
         negativeEmbeds = nil
         MLX.eval(promptEmbeds)
       }

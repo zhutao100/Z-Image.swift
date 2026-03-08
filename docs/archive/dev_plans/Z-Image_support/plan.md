@@ -1,232 +1,202 @@
-Below is a historical implementation plan for adding first-class support for [`Tongyi-MAI/Z-Image`](https://huggingface.co/Tongyi-MAI/Z-Image) to `zimage.swift`.
+# Z-Image Support Plan
 
-The codebase now ships that support, so this document is archived for context only. Current behavior is documented in:
+Validated on 2026-03-08 against the current `zimage.swift` codebase plus the current upstream `Tongyi-MAI/Z-Image` Hugging Face checkpoint and Diffusers `pipeline_z_image.py`.
 
-- [README.md](../../../README.md)
-- [../../CLI.md](../../CLI.md)
-- [../../MODELS_AND_WEIGHTS.md](../../MODELS_AND_WEIGHTS.md)
-- [../../ARCHITECTURE.md](../../ARCHITECTURE.md)
+## Summary
 
-The original plan content is kept below unchanged except for this notice.
+This is a **finish first-class Base support** project, not a new-model port.
 
----
+The Swift runtime already has the right major architecture for `Tongyi-MAI/Z-Image`:
 
-Below is an implementation-oriented plan to add **first-class support for [`Tongyi-MAI/Z-Image`](https://huggingface.co/Tongyi-MAI/Z-Image)** (the new, non-Turbo variant) to the existing **`zimage.swift`** Swift/MLX port.
+- `ZImagePipeline`
+- `ZImageControlPipeline`
+- `ZImageTransformer2DModel`
+- `Qwen3` text encoder path
+- `AutoencoderKL`
+- `FlowMatchEulerDiscreteScheduler`-style scheduler config loading
 
----
+The remaining work is concentrated in four areas:
 
-## 0) Terminology (avoid “variant” ambiguity)
+1. stale Base fixtures and upstream-reference docs
+2. Turbo-biased CLI defaults
+3. missing Base CFG parity controls
+4. missing Base-targeted smoke coverage
 
-Two different things are commonly called “variant”:
+## Validated Upstream Facts
 
-1. **Model family / checkpoint**: `Tongyi-MAI/Z-Image-Turbo` vs `Tongyi-MAI/Z-Image` (Base).
-2. **HF weights “variant” (precision)**: `bf16`, `fp16`, etc. This changes filenames like `*.bf16.safetensors` and the corresponding `*.index.json`.
+Current upstream Base checkpoint facts that this repo should align with:
 
-In this plan:
+- `transformer/config.json` currently exposes `dim = 3840`, `n_layers = 30`, `n_heads = 30`, `cap_feat_dim = 2560`
+- `scheduler/scheduler_config.json` currently exposes `shift = 6.0` and `use_dynamic_shifting = false`
+- Base transformer weights are currently sharded across **2** files
+- Base text encoder weights are currently sharded across **3** files
+- The current model card recommends roughly `28-50` steps and `guidance_scale` in the `3-5` range
+- The current model-card example uses `cfg_normalization=False`
+- Current Diffusers Base pipeline behavior includes:
+  - `cfg_normalization`
+  - `cfg_truncation`
+  - `scheduler.sigma_min = 0.0`
+  - CFG math `pos + scale * (pos - neg)` with optional norm renormalization
 
-- **“model” / “family”** refers to Turbo vs Base.
-- **“weightsVariant”** refers to HF precision variants (`bf16`, `fp16`, …).
+## Current Repo State
 
----
+What is already in place:
 
-## 1) Establish what “support Z-Image” means in this codebase
+- `Sources/ZImage/Support/ZImageModelRegistry.swift` already recognizes both Turbo and Base and already has distinct presets
+- `Sources/ZImage/Weights/ModelConfigs.swift` loads transformer, scheduler, text-encoder, and VAE behavior from snapshot configs
+- `Sources/ZImage/Pipeline/FlowMatchScheduler.swift` already appends a terminal `0.0` sigma
+- `Tests/ZImageTests/Scheduler/FlowMatchSchedulerTests.swift` already covers monotonicity and final-zero-sigma behavior
+- Repo docs already describe Base as supported, but with caveats
 
-### What already looks compatible
+What is currently wrong or incomplete:
 
-From the two model snapshots you attached, `Z-Image` and `Z-Image-Turbo` share the same high-level component layout (`transformer/`, `text_encoder/`, `vae/`, `scheduler/`, `tokenizer/`). The project already:
+- Base snapshot fixtures in `Tests/ZImageTests/Fixtures/Snapshots/ZImageBase/` are stale
+- `Sources/ZImageCLI/main.swift` still seeds text-to-image and control defaults from Turbo-oriented `ZImageModelMetadata`
+- Both pipelines implement only basic CFG and do not expose Base parity controls
+- Default integration coverage is Turbo-only
+- `docs/z-image.md` is partially stale relative to the current upstream Base model card and layout
 
-* resolves model snapshots from a local directory or HF model id (`ModelResolution` / `PipelineSnapshot`)
-* loads configs from JSON (`ZImageModelConfigs`)
-* resolves shard lists dynamically via the `*.safetensors.index.json` weight maps (`ZImageFiles.resolveTransformerWeights/resolveTextEncoderWeights`)
-* implements the Z-Image denoising loop and (optional) CFG path
+## Corrections To Earlier Assumptions
 
-So “adding support” is primarily:
+The earlier draft direction was mostly right, but these points need to be tightened:
 
-1. **first-class model selection + presets** (so users get sane defaults when choosing `Z-Image`),
-2. **robust weight resolution** (avoid mixed bf16/fp16 shard loads; deterministic index selection),
-3. **parity with the official pipeline semantics** that matter for Z-Image in practice:
+- **Do not treat scheduler rewrite as a default requirement.**
+  The current scheduler already appends the terminal zero sigma and has reasonable unit coverage. Base support should only change scheduler code if parity validation proves a concrete mismatch.
+- **Do not frame Base support as architecturally missing.**
+  The architecture is already shared across Turbo and Base. The problem is fidelity of defaults, parity controls, fixtures, and validation.
+- **Treat fixture drift as a correctness bug, not just a documentation issue.**
+  Current Base fixture values are validating an outdated approximation of the upstream checkpoint.
+- **Treat the CLI as the highest-priority defaulting surface.**
+  The library request initializers still have Turbo-oriented scalar defaults by construction, but the immediate user-facing regression is the CLI because it already has model selection and known-model presets available.
 
-   - steps semantics (Turbo’s “9 steps → ~8 effective updates” behavior)
-   - CFG truncation / CFG normalization
-4. **tests/docs/examples** that prove it works and are runnable by contributors.
+## Scope
 
----
+In scope:
 
-## 2) Add a model registry (Turbo vs Base vs future variants)
+- Base fixture and doc rebaseline
+- model-aware CLI defaults
+- Base CFG parity knobs in both pipelines
+- Base smoke coverage and doc cleanup
 
-### Goal
+Out of scope for this project:
 
-Avoid “stringly-typed” model ids scattered across CLI/pipeline and ensure the defaults change when the user selects `Z-Image`.
+- separate Base-specific model implementations
+- `Z-Image-Omni-Base`, `Z-Image-Edit`, or unrelated model families
+- speculative scheduler rewrites without parity evidence
+- major CLI parser replacement
+- broader ControlNet feature expansion unrelated to Base support
 
-### Work items
+## Execution Principles
 
-**A. Create a small model registry type**
-Add a new file, e.g. `Sources/ZImage/Support/ZImageModelRegistry.swift`:
+- Keep Base and Control paths behaviorally aligned when changing denoising logic
+- Prefer a shared helper in `PipelineUtilities.swift` over duplicating CFG math
+- Update docs in the same phase as user-visible behavior changes
+- Verify each phase independently before committing
+- Record only measurable runtime-impact results; do not add transient debugging scaffolding
 
-* `enum ZImageKnownModel`
+## Recommended Implementation Order
 
-  * `.zImageTurbo` → `"Tongyi-MAI/Z-Image-Turbo"`
-  * `.zImage` → `"Tongyi-MAI/Z-Image"`
-  * (optional) `.zImageTurbo8bit` → `"mzbac/z-image-turbo-8bit"` (existing tests use this)
+### Phase 1: Rebaseline Base Fixtures And Upstream Reference Docs
 
-* `struct ZImagePreset`
+Goal:
+Make the repo's Base assumptions match the current upstream checkpoint before changing runtime behavior.
 
-  * `recommendedSteps`
-  * `recommendedGuidance`
-  * `recommendedResolution` (keep current 1024 defaults for Turbo; for `Z-Image` you may prefer 1024 too, but document its recommended operating range)
-  * `recommendedMaxSequenceLength` (default 512; document that 1024 is useful for long prompts)
-  * `defaultNegativePrompt` (often `""`)
-  * (optional) `recommendedCFGTruncation` / `recommendedCFGNormalization` defaults for “known” presets
+Required work:
 
-**B. Update `ZImageRepository` / cache naming**
-Right now `ZImageRepository.id` and `defaultCacheDirectory()` are Turbo-specific. Refactor to:
+- update Base snapshot fixture configs to current upstream values
+- update Base shard-layout fixtures to current upstream shard counts
+- tighten snapshot and model-path tests around the real Base layout
+- sync `docs/z-image.md` with the current model card and repo layout
 
-* keep Turbo as the default (to preserve current behavior),
-* add a helper:
+Why first:
 
-  * `static func defaultCacheDirectory(for modelId: String, base: URL = ...) -> URL`
+- it removes false confidence from outdated tests
+- later CLI and pipeline work should not build on stale fixture assumptions
 
-    * e.g. `.../z-image-turbo` vs `.../z-image`
+### Phase 2: Make CLI Defaults Model-Aware
 
-This prevents confusing cache layouts when users switch between `Z-Image-Turbo` and `Z-Image`.
+Goal:
+`ZImageCLI --model Tongyi-MAI/Z-Image` and `ZImageCLI control --model Tongyi-MAI/Z-Image` should pick Base-appropriate defaults unless the user explicitly overrides them.
 
-**C. Make “variant reuse” aware of `Z-Image`**
-Update `areZImageVariants(_:_:)` in:
+Required work:
 
-* `ZImagePipeline.swift`
-* `ZImageControlPipeline.swift`
+- track whether width, height, steps, guidance, and other preset-driven fields were explicitly provided
+- apply `ZImagePreset.defaults(for:)` only to unset fields
+- reuse the same policy in both top-level and `control` parsing paths
+- update help text and user-facing docs to describe the new behavior accurately
 
-so the base model id is included in the “same-family” check, allowing clean in-place weight swapping between `Z-Image-Turbo` and `Z-Image` (instead of forcing a full teardown/rebuild).
+Important constraint:
 
-**D. Ensure defaults propagate through *all* entry points**
+- Turbo behavior must remain unchanged when `--model` is omitted
 
-Default model id/revision and caching decisions currently flow through more than CLI + `ZImageRepository`.
-Explicitly include these in the refactor checklist so Turbo-default leakage doesn’t persist:
+### Phase 3: Add Base CFG Parity Controls
 
-* `Sources/ZImage/Pipeline/PipelineSnapshot.swift` (default model selection)
-* `Sources/ZImage/Weights/ModelResolution.swift` (default model id/revision and cache lookup)
+Goal:
+Expose and implement the most meaningful current Base inference knobs from Diffusers.
 
----
+Required work:
 
-## 3) Make weight/index resolution robust to HF precision variants (bf16/fp16/…)
+- add request-surface fields for CFG truncation and CFG normalization
+- wire equivalent CLI flags
+- centralize the CFG combine-and-renormalize logic in shared pipeline utility code
+- apply the same behavior in `ZImagePipeline` and `ZImageControlPipeline`
+- add unit coverage for the helper and request/CLI plumbing
 
-Today the “dynamic” weight resolvers still assume fixed filenames for index.json (e.g. `transformer/diffusion_pytorch_model.safetensors.index.json`).
-This becomes fragile as soon as a repo contains multiple weight variants (bf16/fp16/etc.), because directory scans can accidentally select a mixed set.
-`ModelResolution` also downloads `["*.safetensors", "*.json", "tokenizer/*"]`, which will pull **all** variants if present.
+Important constraint:
 
-### Work items
+- keep guidance disabled when the effective guidance scale for a step is zero
 
-**A. Introduce an explicit `weightsVariant`**
+### Phase 4: Add Base Validation Coverage And Retire Stale Messaging
 
-Add an optional `weightsVariant: String?` to the model selection/config surface area (CLI + library). This should map to HF’s “variant” concept (e.g. `"bf16"`).
+Goal:
+Prove that Base loading and denoising work in at least one opt-in real-model path, then clean up docs and roadmap wording.
 
-**B. Make index selection variant-aware**
+Required work:
 
-Update `ZImageFiles.resolveTransformerWeights` / `resolveTextEncoderWeights` (and VAE if needed) to accept `weightsVariant` and:
+- add an env-gated Base integration smoke test
+- keep it out of default CI unless weights are present
+- update `README.md`, `docs/CLI.md`, `docs/MODELS_AND_WEIGHTS.md`, and `docs/dev_plans/ROADMAP.md`
+- make sure completed planning docs no longer describe Base support as mostly missing
 
-* Prefer `*.{weightsVariant}.safetensors.index.json` when `weightsVariant != nil`
-* Fall back to the non-variant index filename if the variant index isn’t present
-* When scanning directories, only accept candidates whose filenames match the chosen variant (to prevent mixing)
+## Verification Gates
 
-**C. Make downloads variant-aware**
+Each phase must end with targeted verification before commit.
 
-Update `ModelResolution` to allow downloading only the selected variant:
+Phase 1:
 
-* If `weightsVariant != nil`, use patterns like:
+- `xcodebuild test -scheme zimage.swift-Package -destination 'platform=macOS' -enableCodeCoverage NO -only-testing:ZImageTests/Config/SnapshotModelConfigsTests -only-testing:ZImageTests/Weights/ModelPathsResolutionTests`
 
-  * `"*.\(weightsVariant).safetensors"`
-  * `"*.\(weightsVariant).safetensors.index.json"`
-  * plus the required `*.json` configs + tokenizer files
+Phase 2:
 
-* If multiple variants exist and the user didn’t specify one, keep a deterministic default (prefer non-variant) and log a warning listing discovered variants.
+- focused `ZImageTests` coverage for presets and any CLI parsing helpers added
+- build the CLI target
 
-**D. Add guardrails**
+Phase 3:
 
-If `weightsVariant` is set but required components don’t have matching weights (transformer/text_encoder/vae), fail with a clear error that points out the mismatch (avoid partial/mixed loads).
+- focused `ZImageTests` coverage for new CFG helper behavior and request defaults/plumbing
+- build the package or CLI target that exercises the changed surfaces
 
----
+Phase 4:
 
-## 4) Verify and align step semantics with the reference Z-Image pipeline
+- run the opt-in Base smoke test only when the required snapshot is available
+- rerun the targeted fast suite covering all touched areas
 
-Turbo’s model card guidance says `num_inference_steps=9` “results in ~8 DiT forwards”. The current Swift implementation runs exactly `request.steps` denoise iterations, and the current scheduler does not naturally terminate at `sigma=0`, so the last step is *not* a no-op.
+## Commit Strategy
 
-The reference Diffusers pipeline forces the schedule to end at `sigma=0` (`scheduler.sigma_min = 0.0`) and appends a terminal sigma; this makes the last `dt` zero, so the final iteration doesn’t change latents (and can be skipped as a perf optimization without changing output).
+Use one Conventional Commit per completed phase. Recommended subjects:
 
-### Work items
+- `docs(z-image-support): harden base support plan`
+- `test(z-image-support): rebaseline base fixtures`
+- `feat(cli): apply model-aware z-image presets`
+- `feat(pipeline): add base cfg parity controls`
+- `test(z-image-support): add base smoke coverage`
 
-**A. Decide what the public “steps” semantic is**
+## Exit Criteria
 
-* Keep CLI/library semantics aligned with Diffusers: `--steps` maps to `num_inference_steps`.
-* Document that (for this scheduler) the last iteration can be a no-op when the schedule ends at `sigma=0`, which is why “9 steps → ~8 effective updates” can be true.
+This project is complete when all of the following are true:
 
-**B. Update the Swift scheduler/pipeline to match**
-
-* Extend `FlowMatchEulerScheduler` to support an explicit terminal sigma (e.g. `sigmaMinOverride = 0.0`).
-* In both `ZImagePipeline` and `ZImageControlPipeline`, construct the scheduler with terminal sigma = 0.0 (matching Diffusers pipeline behavior) unless there’s evidence Base needs different semantics.
-* Optional optimization: if `dt == 0` on the last step, skip the transformer forward for that iteration. Call this out explicitly as “perf optimization; numerically equivalent because the update is a no-op.”
-
-**C. Add a fast unit test for step semantics**
-
-Add a unit test (no weights) that validates:
-
-* scheduler produces `numInferenceSteps` timesteps and `numInferenceSteps + 1` sigmas
-* terminal sigma is 0 and last `dt` is 0 when `sigmaMinOverride == 0`
-* Turbo preset’s “9 steps → ~8 effective updates” statement is true under the chosen semantics
-
----
-
-## 5) Add the missing `Z-Image` inference knobs: CFG truncation + CFG normalization
-
-The official Z-Image pipeline supports:
-
-* `cfg_truncation`: disables CFG after a normalized time threshold
-* `cfg_normalization`: renormalizes/clamps the CFG output norm relative to the original “positive” prediction norm ([Hugging Face][1])
-
-Even if the `Tongyi-MAI/Z-Image` model card’s minimal recommendation doesn’t require them, adding them makes your Swift port “real pipeline compatible”.
-
-### Work items
-
-**A. Extend request types**
-Update `ZImageGenerationRequest` (and the corresponding control request if separate) to include:
-
-* `cfgTruncation: Float?`
-
-  * semantics: threshold in `[0, 1]` on `t_norm` (same normalization you already compute: `(1000 - t)/1000`)
-  * default: `nil` (or `1.0`) meaning “never truncate”
-
-* `cfgNormalization: Bool`
-
-  * semantics: match Diffusers API (boolean). When enabled, apply the same renormalization logic as reference.
-  * default: `false` (disabled)
-
-* (optional, advanced) `cfgNormalizationFactor: Float?`
-
-  * semantics: treat Diffusers’ bool as `k = 1.0`; allow advanced callers to override `k` if desired.
-  * default: `nil` meaning “use `1.0` when `cfgNormalization == true`”
-
-**B. Implement in both denoising loops**
-You currently have duplicated denoising code in:
-
-* `ZImagePipeline.generateCore(...)`
-* `ZImageControlPipeline` (two denoise paths)
-
-Implement the same logic in both:
-
-1. compute `tNorm` (you already compute `normalizedTimestep`)
-2. compute `currentGuidanceScale`:
-
-   * start with `request.guidanceScale`
-   * if `cfgTruncation != nil` and `tNorm > cfgTruncation` ⇒ set `currentGuidanceScale = 0`
-3. `applyCFG = doCFG && currentGuidanceScale > 0`
-4. if `applyCFG`:
-
-   * run the 2× batch
-   * compute `pred = pos + currentGuidanceScale * (pos - neg)` (this matches the official Z-Image pipeline behavior) ([Hugging Face][1])
-   * if `cfgNormalization`:
-
-     * `k = cfgNormalizationFactor ?? 1.0`
-     * `ori = l2Norm(pos)` and `new = l2Norm(pred)` using a **global** vector norm over all elements (Diffusers uses `torch.linalg.vector_norm`).
-     * `maxNew = ori * k`
-     * if `new > maxNew`: `pred *= maxNew / (new + eps)` (`eps` to avoid division by zero) ([Hugging Face][1])
-
-This gives you parity with the pipeline’s behavior and avoids edge-case “blow-ups” at high guidance.
+- Base fixtures and tests reflect the current upstream checkpoint
+- Base CLI runs no longer silently inherit Turbo sampling defaults
+- both pipelines expose and implement Base CFG parity controls
+- there is an opt-in validation path that exercises real Base loading
+- docs no longer describe current Base support in outdated or contradictory terms
