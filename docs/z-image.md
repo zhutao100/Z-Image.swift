@@ -3,7 +3,7 @@
 **Top-level files and folders** (Hub file browser):
 `model_index.json`, `scheduler/`, `text_encoder/`, `tokenizer/`, `transformer/`, `vae/`, `README.md`, `teaser.jpg`. [Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image/tree/main)
 
-> Note: This document is a **reference for the upstream model repository layout** (Hugging Face / Diffusers concepts). For how **Z-Image.swift** resolves and loads model weights (local paths, HF cache, quantization, AIO checkpoints), start with `docs/MODELS_AND_WEIGHTS.md`.
+> Note: This document is a **reference for the upstream model repository layout** (Hugging Face / Diffusers concepts). For how **zimage.swift** resolves and loads model weights in this repo, start with [MODELS_AND_WEIGHTS.md](MODELS_AND_WEIGHTS.md).
 
 ---
 
@@ -38,8 +38,8 @@
 
 This instructs Diffusers to instantiate **`ZImagePipeline`** and load each component from its subfolder using the declared class. [Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image/blob/main/model_index.json)
 
-- Pipeline: `ZImagePipeline` (Diffusers) — docs: [Diffusers]({"https://huggingface.co/docs/diffusers/en/api/pipelines/z_image"})
-- Transformer: `ZImageTransformer2DModel` (Diffusers) — docs: [Diffusers]({"https://huggingface.co/docs/diffusers/main/en/api/models/z_image_transformer2d"})
+- Pipeline: `ZImagePipeline` (Diffusers)
+- Transformer: `ZImageTransformer2DModel` (Diffusers)
 - Scheduler: `FlowMatchEulerDiscreteScheduler` (Diffusers)
 - Text encoder: `Qwen3Model` (Transformers)
 - Tokenizer: `Qwen2Tokenizer` (Transformers)

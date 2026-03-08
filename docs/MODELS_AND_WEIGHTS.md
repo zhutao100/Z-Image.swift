@@ -1,111 +1,167 @@
-# Models & Weights
+# Models And Weights
 
-This doc explains how **Z-Image.swift** resolves model specs, where weights are cached, and how quantization / overrides / AIO checkpoints work.
+This document explains how the current repo resolves model sources, chooses weight files, and handles quantization, AIO checkpoints, and transformer overrides.
 
-## Model Spec Forms
+## Default And Known Model IDs
 
-The pipelines accept `model` as either:
+- Default CLI model: `Tongyi-MAI/Z-Image-Turbo`
+- Also supported in the current codebase:
+  - `Tongyi-MAI/Z-Image`
+  - `mzbac/z-image-turbo-8bit`
 
-1. Hugging Face model id: `org/repo`
-   - Optional revision syntax: `org/repo:revision`
-2. A local directory containing a Diffusers-style layout:
-   - `transformer/`, `text_encoder/`, `vae/`, `tokenizer/`, plus JSON configs
-3. A local `.safetensors` file:
-   - Interpreted as an **AIO checkpoint** if it contains transformer + text encoder + VAE tensors with recognized key prefixes
-   - Otherwise interpreted as a **transformer-only override**
+Known ids and per-model presets live in `Sources/ZImage/Support/ZImageModelRegistry.swift`.
 
-The CLI flag is `--model/-m` (see `Sources/ZImageCLI/main.swift`).
+## Accepted Model Specs
 
-## Weights Variant (`--weights-variant`)
+`--model/-m` and the library request types accept:
 
-Some Hugging Face repos ship multiple precision variants (e.g. `fp16`, `bf16`) with different `*.safetensors` (and often `*.safetensors.index.json`) filenames.
+1. Hugging Face repo id: `org/repo`
+2. Hugging Face repo id with revision: `org/repo:revision`
+3. Local Diffusers-style model directory containing the expected configs, tokenizer files, and weights
+4. Local `.safetensors`
+   - AIO checkpoint if it contains transformer, text-encoder, and VAE tensors with recognized prefixes
+   - transformer-only override otherwise
 
-When `--weights-variant <name>` is provided:
+Resolution behavior comes from:
 
-- Weight resolution prefers `*.{name}.safetensors.index.json` when present.
-- Directory scans and index selection avoid mixing shards across variants.
-- Downloads only fetch files matching the requested variant (plus required `*.json` + `tokenizer/*`).
-- If any required component (transformer / text encoder / VAE) is missing matching weights for the requested variant, loading fails with a clear error.
+- `Sources/ZImage/Weights/ModelResolution.swift`
+- `Sources/ZImage/Pipeline/PipelineSnapshot.swift`
+- `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 
-## Hugging Face Cache
+## Resolution Order
 
-When downloading from Hugging Face, the resolver looks for an existing snapshot first, and otherwise downloads into the standard HF cache layout.
+When a model spec is provided:
 
-Environment variables recognized by the resolver:
+1. If it is an existing local path, the repo uses that path directly.
+2. Otherwise, if it looks like `org/repo` or `org/repo:revision`, the repo checks the Hugging Face cache.
+3. If no matching snapshot is cached, it downloads the required files into the Hugging Face cache and then loads from that snapshot.
 
-- `HF_HUB_CACHE`: overrides the hub cache directory directly
-- `HF_HOME`: used as `<HF_HOME>/hub`
+When no model spec is provided, the same logic is applied to the default model id and revision.
 
-If neither is set, the default is:
+## Hugging Face Cache And Environment Variables
 
-- `~/.cache/huggingface/hub`
+The resolver uses the standard Hugging Face cache layout. The practical controls are:
 
-Source of truth: `Sources/ZImage/Weights/ModelResolution.swift` (`getHuggingFaceCacheDirectory()`).
+- `HF_HUB_CACHE`: direct hub-cache override
+- `HF_HOME`: uses `<HF_HOME>/hub`
+- `HF_ENDPOINT`: alternate Hugging Face host
 
-## Authentication (Gated / Private Repos)
+If neither cache variable is set, the default cache root is:
 
-The underlying Hugging Face client (`HubClient` from `swift-huggingface`) supports auth tokens via common conventions, including:
+```text
+~/.cache/huggingface/hub
+```
 
-- `HF_TOKEN`
-- `HUGGING_FACE_HUB_TOKEN`
-- `HF_TOKEN_PATH` (file containing a token)
-- `HF_HOME/token`
-- `~/.cache/huggingface/token` or `~/.huggingface/token`
+The repo first checks the normal `models--ORG--REPO/snapshots/<commit>/` layout and then the `swift-transformers` local cache layout under `<cache>/models/ORG/REPO/`.
 
-If you hit an “authorization required” error, set `HF_TOKEN` (or one of the above) and retry.
+Source of truth:
+
+- `Sources/ZImage/Weights/ModelResolution.swift`
+- `Sources/ZImage/Weights/HuggingFaceHub.swift`
+
+## Authentication
+
+The repo relies on the Hugging Face client libraries' environment-based authentication. In practice, `HF_TOKEN` is the most direct user-facing way to authenticate for gated or private repos.
+
+If a repo requires auth and loading fails, the two supported fallback paths are:
+
+- authenticate and rerun, or
+- download the weights locally and point `--model` or `--controlnet-weights` at the local path
+
+## Weights Variants (`--weights-variant`)
+
+Some repos ship multiple precision-specific weight sets such as `fp16` or `bf16`.
+
+When `--weights-variant <name>` is set:
+
+- resolution prefers `*.{name}.safetensors.index.json` where present
+- directory scans avoid mixing shards from different variants
+- download patterns are narrowed to the requested variant plus required JSON and tokenizer files
+- loading fails if transformer, text encoder, or VAE weights are missing for that variant
+
+This behavior is implemented in:
+
+- `Sources/ZImage/Weights/ModelPaths.swift`
+- `Sources/ZImage/Weights/ZImageWeightsMapper.swift`
+- `Sources/ZImage/Pipeline/PipelineSnapshot.swift`
 
 ## Quantized Models
 
-Quantized models are stored as a directory containing the usual model files plus a manifest:
+Quantized models are regular model directories plus a manifest:
 
-- `quantization.json` (base model)
-- `controlnet_quantization.json` (ControlNet)
+- `quantization.json` for base-model quantization
+- `controlnet_quantization.json` for ControlNet quantization
 
-At load time, the pipeline detects these manifests and applies quantization transforms when mapping tensors into MLX modules.
+At load time, the pipelines detect the manifest and wrap the mapped tensors with quantized MLX modules.
 
-Sources of truth:
+Source of truth:
 
 - `Sources/ZImage/Quantization/ZImageQuantization.swift`
 - `Sources/ZImage/Weights/WeightsMapping.swift`
 
 ## AIO Checkpoints
 
-An “AIO checkpoint” is a single `.safetensors` file containing all components (transformer + text encoder + VAE).
+A local `.safetensors` can be treated as an all-in-one checkpoint if it contains the expected component prefixes:
 
-The pipeline performs a lightweight header inspection to decide whether a `.safetensors` file is AIO. Expected tensor prefixes include:
+- transformer tensors under `model.diffusion_model.*` or `diffusion_model.*`
+- text-encoder tensors under a recognized `text_encoders.*.transformer.model.*` prefix
+- VAE tensors under `vae.*`
 
-- Transformer: `model.diffusion_model.*` (or `diffusion_model.*`)
-- Text encoder: `text_encoders.<name>.transformer.model.*`
-- VAE: `vae.*` (and a recognizable decoder layout)
+If the file is detected as AIO:
 
-If a file is detected as AIO:
+- base-model snapshot loading is bypassed
+- the transformer and text encoder are loaded from the single file
+- the VAE decoder weights may be canonicalized from ComfyUI-style naming when needed
+- if AIO VAE coverage is insufficient, the pipeline falls back to the base VAE weights
 
-- The pipeline bypasses downloading/loading base model weights.
-- The AIO VAE decoder may be canonicalized from ComfyUI naming to Diffusers naming (when needed).
+Source of truth:
 
-Source of truth: `Sources/ZImage/Weights/AIOCheckpoint.swift` and AIO handling in `Sources/ZImage/Pipeline/ZImagePipeline.swift`.
+- `Sources/ZImage/Weights/AIOCheckpoint.swift`
+- `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 
-## Transformer Overrides (`.safetensors`)
+## Transformer Overrides
 
-If a local `.safetensors` file is **not** detected as AIO, the pipeline treats it as a transformer-only override:
+If a local `.safetensors` is not detected as AIO, it is treated as a transformer-only override:
 
-- Base model weights are loaded as usual.
-- Then the override tensors are canonicalized and applied on top of the base transformer weights.
+- the base snapshot is still resolved and loaded
+- override tensors are canonicalized and applied on top of the base transformer
 
-If you want to force a `.safetensors` to be treated as transformer-only (skipping AIO detection), use:
+To skip AIO auto-detection and force that behavior, use:
 
 - CLI: `--force-transformer-override-only`
 
-Source of truth: `Sources/ZImage/Pipeline/ZImagePipeline.swift` (`resolveModelSelection`, `applyTransformerOverrideIfNeeded`).
+The relevant code is in `Sources/ZImage/Pipeline/ZImagePipeline.swift`.
+
+## ControlNet Weights
+
+`ZImageCLI control --controlnet-weights` accepts:
+
+- a local `.safetensors`
+- a local directory
+- a Hugging Face repo id
+
+`--control-file` can be used to choose a specific `.safetensors` file when the source contains more than one.
+
+Quantized ControlNet directories use `controlnet_quantization.json`.
+
+Source of truth:
+
+- `Sources/ZImageCLI/main.swift`
+- `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
+- `Sources/ZImage/Quantization/ZImageQuantization.swift`
 
 ## Troubleshooting
 
-### “Model not found”
+### Model Not Found
 
-- If you passed a local path, ensure it exists and is readable.
-- If you passed `org/repo`, ensure you have a working network connection and the repo is public.
-- For gated/private repos, authenticate (see above) or download weights locally and point `--model` at a local directory.
+- If you passed a local path, verify the path exists and is readable.
+- If you passed `org/repo`, verify the repo exists and your network is available.
+- If the repo is gated or private, authenticate and retry or use a local download.
 
-### “No internet connection”
+### Wrong Results From `Tongyi-MAI/Z-Image`
 
-Pre-download the snapshot (run once with network), then rerun offline. The resolver will reuse an existing snapshot if present.
+The CLI still starts from Turbo-oriented defaults. For the Base model, set `--steps` and `--guidance` explicitly.
+
+### Offline Reuse
+
+Once a snapshot has been downloaded into the Hugging Face cache, reruns can reuse it without downloading again.

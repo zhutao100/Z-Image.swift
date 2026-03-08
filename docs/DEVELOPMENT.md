@@ -1,44 +1,87 @@
 # Development
 
-This doc is for contributors / maintainers working on the Swift package and CLI.
+This document covers the current contributor workflow: build, test, format, release, and the targeted validation paths that still matter in this repo.
 
 ## Build
 
-Release build (macOS):
+Fast path:
 
 ```bash
-xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
+./scripts/build.sh
 ```
 
-Note: `mlx-swift` may use a package plugin that prepares Metal shader libraries. In CI/non-interactive contexts, the repo’s GitHub Actions workflow uses:
+Explicit release build:
 
-- `-skipPackagePluginValidation`
-- `ENABLE_PLUGIN_PREPAREMLSHADERS=YES`
+```bash
+xcodebuild -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
+```
 
-See `.github/workflows/ci.yml` for the exact command line used for releases.
+CI uses a more explicit non-interactive form:
+
+```bash
+xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath ./dist -skipPackagePluginValidation ENABLE_PLUGIN_PREPAREMLSHADERS=YES CLANG_COVERAGE_MAPPING=NO
+```
+
+The package depends on the MLX shader-preparation plugin. In local interactive builds, allow the prompt if Xcode asks. In CI or scripted environments, use the same plugin flags as `.github/workflows/ci.yml`.
+
+### SwiftPM-Only Binary Builds
+
+If you intentionally build the CLI with `swift build`, you may also need to colocate `mlx.metallib`:
+
+```bash
+swift build -c debug
+./scripts/build_mlx_metallib.sh --configuration debug
+```
+
+That workflow is mainly for local experimentation. The default repo path is still the Xcode build above.
 
 ## Tests
 
-Unit tests (recommended default):
+Default verification path:
 
 ```bash
 xcodebuild test -scheme zimage.swift-Package -destination 'platform=macOS' -enableCodeCoverage NO -only-testing:ZImageTests
 ```
 
-Other test suites exist but are intentionally heavier:
+Heavier test suites are opt-in:
 
-- Integration tests: `ZImageIntegrationTests` (require model downloads)
-- E2E tests: `ZImageE2ETests` (build + run the CLI)
+- `ZImageIntegrationTests`: require real model weights
+- `ZImageE2ETests`: build and execute the CLI
 
-## Repo Conventions
+Use those only when the task specifically needs them.
 
-- Swift Package Manager layout: `Sources/`, `Tests/`
-- Keep model/weights behavior consistent with Diffusers when possible (see `~/workspace/custom-builds/diffusers`).
-- Prefer updating docs in `docs/` (and linking from the root `README.md`) instead of duplicating large explanations in multiple places.
+## CI And Packaging
 
-## Control-Path Memory Validation
+Current CI behavior:
 
-When changing `ZImageControlPipeline` or the VAE encoder, use the same verification shape as the control-context memory remediation work:
+- trigger: pushes to `main`
+- runner: `macos-latest`
+- Xcode: `16.0`
+- artifact: `zimage.macos.arm64.zip`
+- release target: GitHub prerelease tag `nightly`
+
+Source of truth:
+
+- `.github/workflows/ci.yml`
+
+If you change build flags, artifact names, or release semantics, update this doc, the workflow, and the root `README.md` together.
+
+## Docs Expectations
+
+When user-visible behavior changes, update the docs in the same patch:
+
+- CLI behavior: `README.md`, `docs/CLI.md`, `Sources/ZImageCLI/main.swift`
+- model loading or cache behavior: `docs/MODELS_AND_WEIGHTS.md`
+- code structure and ownership: `docs/ARCHITECTURE.md`
+- build/test/release workflow: this file and `.github/workflows/ci.yml`
+
+Prefer one detailed explanation in `docs/` and link to it rather than duplicating long prose in multiple places.
+
+## Targeted Validation
+
+### Control-Memory Validation
+
+When changing `ZImageControlPipeline`, ControlNet loading, or the VAE encode/decode path, use the retained high-resolution probe:
 
 ```bash
 xcodebuild test -scheme zimage.swift-Package -destination 'platform=macOS' -enableCodeCoverage NO -only-testing:ZImageTests
@@ -56,17 +99,31 @@ xcodebuild build -scheme ZImageCLI -destination 'platform=macOS' -derivedDataPat
   --output /tmp/zimage-control-memory-check.png
 ```
 
-Watch `control-context.after-baseline-reduction`, `control-context.after-eval`, `control-context.after-clear-cache`, and `decode.after-eval`. The retained runtime policy is:
+Watch these markers:
 
-- keep `--log-control-memory` as the supported probe
-- unload transformer, ControlNet, and active LoRA state before `buildControlContext(...)`
+- `control-context.after-baseline-reduction`
+- `control-context.after-eval`
+- `control-context.after-clear-cache`
+- `decode.after-eval`
+
+Current retained policy:
+
+- keep `--log-control-memory` as the public probe
+- unload transformer, ControlNet, and active LoRA state before control-context build when they are not needed
 - load the control-path VAE encoder on demand and unload it immediately after the typed control context is materialized
-- materialize the stored control-context tensor and clear cache before transformer/controlnet reload
-- keep ControlNet hint accumulation incremental; do not reintroduce per-block `MLX.stacked(...)` rebuilding in the control transformer path
-- defer decoder-only VAE loading until final decode, then unload it after `decode.after-eval`
-- keep query-chunked VAE self-attention on by default
-- skip tiled encode unless new measurements show a pathological regression again
+- clear MLX cache before denoiser modules are reloaded
+- keep incremental ControlNet hint accumulation
+- keep query-chunked VAE self-attention enabled by default
 
-## Performance & Memory Notes
+### Numerical-Parity Work
 
-Running these models on Apple Silicon can be memory-heavy, especially at high resolutions. Historical investigations are kept in `docs/archive/`, and the latest control-path outcome is recorded in `docs/dev_plans/control-context-memory-remediation.md`.
+If you are chasing Swift vs Python or Diffusers drift, read:
+
+- [golden_checks.md](golden_checks.md)
+- `docs/context/`
+
+Those docs are the current background set for parity and precision work.
+
+## Performance Notes
+
+These models are large. First-time downloads can be tens of GB, and higher resolutions still stress unified memory. Historical investigations live under `docs/archive/`; the current control-memory outcome is captured in `docs/dev_plans/control-context-memory-remediation.md` and `docs/dev_plans/controlnet-memory-followup.md`.

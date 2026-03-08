@@ -1,27 +1,29 @@
-# Roadmap (Next Steps)
+# Roadmap
 
-This is a lightweight, prioritized list of *potential* next steps for the project. It’s meant to guide work, not to promise timelines.
+This is the short, current priority list for the repo. It is intentionally small and should only contain work that still makes sense from the current codebase state.
 
-## Highest Priority
+## Near Term
 
-1. **Reduce duplication across pipelines and transformer variants**
-   - `ZImagePipeline` vs `ZImageControlPipeline`
-   - `ZImageTransformer2DModel` vs `ZImageControlTransformer2DModel`
-2. **Harden the CLI UX**
-   - Improve argument validation / error messages
-   - Consider migrating to `apple/swift-argument-parser` (not currently used)
-3. **Make model resolution more ergonomic**
-   - Clearer docs and errors for local paths vs HF ids
-   - Better surfacing of auth requirements for gated/private repos (e.g. guidance for `HF_TOKEN`)
+1. **Apply model-aware presets in the CLI**
+   - The library has Turbo vs Base presets, but the CLI still boots with Turbo-oriented defaults even when `--model Tongyi-MAI/Z-Image` is selected.
+2. **Reduce duplicated loading and denoising logic**
+   - The main overlap is still between `ZImagePipeline` and `ZImageControlPipeline`, plus the base/control transformer variants.
+3. **Improve CLI ergonomics**
+   - Better validation and clearer errors for missing required flags and bad values
+   - Revisit whether manual parsing in `Sources/ZImageCLI/main.swift` is still worth keeping
+4. **Tighten model-resolution UX**
+   - Clearer feedback for local-path mistakes, auth failures, and `--weights-variant` mismatches
 
-## Nice To Have
+## Follow-On Work
 
-4. **Batch / multi-image generation**
-5. **More control over sampler and prompt encoding**
-6. **First-class iOS example app**
+5. **Expose more of the library-only control features in the CLI**
+   - Control-path LoRA and prompt enhancement are implemented in the library request type but not yet surfaced in `ZImageCLI control`
+6. **Add a first-party app example**
+   - The package declares an iOS library target, but the repo still has no maintained sample app
+7. **Consider batch or multi-image generation**
 
 ## Ongoing Maintenance
 
-- Keep CLI help text and docs in sync.
-- Use `--log-control-memory` and the `1536x2304` control reference run from [`control-context-memory-remediation.md`](control-context-memory-remediation.md) when touching the control/VAE memory path.
-- Prefer adding new docs under `docs/` and linking from `README.md` (avoid duplicated explanations).
+- Keep `README.md`, `docs/CLI.md`, and CLI help text in sync.
+- Use `ZImageCLI control --log-control-memory` with the `1536x2304` reference probe when changing control-memory-sensitive paths.
+- Archive completed plans instead of leaving them in `docs/dev_plans/` as if they were still active.

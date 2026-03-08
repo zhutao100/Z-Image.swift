@@ -1,3 +1,16 @@
+This is an archived phased implementation plan for adding first-class `Tongyi-MAI/Z-Image` support.
+
+That work is now part of the shipped codebase, so this file is kept only as historical planning context. Current behavior and active work live in:
+
+- [../../CLI.md](../../CLI.md)
+- [../../MODELS_AND_WEIGHTS.md](../../MODELS_AND_WEIGHTS.md)
+- [../../ARCHITECTURE.md](../../ARCHITECTURE.md)
+- [../README.md](../README.md)
+
+The original phased plan follows unchanged except for this notice.
+
+---
+
 Below is a **PR-sized, phased implementation plan** that tracks the refreshed plan’s major workstreams: **model registry/presets**, **weightsVariant safety**, **step semantics parity**, **CFG truncation + normalization**, plus **tests/docs** as “definition-of-done” gates.
 
 **Terminology (avoid “variant” ambiguity)**

@@ -1,197 +1,123 @@
 # Z-Image.swift
 
-Swift + MLX implementation of [Tongyi-MAI/Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) for Apple Silicon.
+Native Swift + MLX implementation of the `Tongyi-MAI/Z-Image` family for Apple Silicon.
 
-Ships as:
+The repo ships two products:
 
-- `ZImage` (library)
-- `ZImageCLI` (macOS CLI)
+- `ZImage`: a Swift library for macOS and iOS targets
+- `ZImageCLI`: a macOS command-line interface
 
-**Try it with an easy UI:** [Lingdong Desktop App](https://lingdong.app/en)
+## What It Supports
 
-## Features
+- Text-to-image generation with the Z-Image diffusion transformer and Flow Match scheduler
+- ControlNet conditioning and inpainting via `ZImageCLI control`
+- LoRA and LoKr adapters on the text-to-image CLI and in the library pipelines
+- 4-bit and 8-bit quantization for base-model and ControlNet weights
+- Hugging Face snapshots, local Diffusers-style model folders, local AIO `.safetensors`, and transformer-only overrides
+- Optional prompt enhancement on the text-to-image CLI via the Qwen text encoder's generation path
 
-- Text-to-image generation (Flow Matching scheduler)
-- ControlNet conditioning + inpainting (`ZImageCLI control`)
-- LoRA / LoKr adapters (`--lora`)
-- Quantization (4-bit / 8-bit) for base model and ControlNet (`ZImageCLI quantize*`)
-- Model loading from Hugging Face (cached) or local paths
-- Optional “prompt enhancement” using the Qwen text encoder in LLM mode (`--enhance`)
+The default CLI model is `Tongyi-MAI/Z-Image-Turbo`.
 
-## Requirements
+## Quickstart
 
-- Apple Silicon
-- macOS 14.0+ (CLI) / iOS 17+ (library target)
-- Swift 6.0+ (CI uses Xcode 16.0)
+### Prerequisites
 
-## Quickstart (CLI)
+- Apple Silicon Mac
+- macOS 14.0+
+- Xcode 16.x or another Swift 6 toolchain that can build the package
+- Network access for the first run unless you already have the weights locally
 
-Build a release binary:
+### Build
+
+The shortest path is the repo script:
 
 ```bash
-./build.sh
+./scripts/build.sh
 ```
 
-Or equivalently:
+Equivalent explicit command:
 
 ```bash
 xcodebuild -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
 ```
 
-Run from the build products directory:
+### Run
 
 ```bash
 cd .build/xcode/Build/Products/Release
-./ZImageCLI -p "A beautiful mountain landscape at sunset" -o output.png
+./ZImageCLI --help
+./ZImageCLI -p "a studio photo of a red apple on black velvet" -o output.png
 ```
 
-Show help / subcommands:
+First run will download the default model snapshot into the Hugging Face cache.
+
+### Minimal Examples
+
+Turbo defaults:
 
 ```bash
-./ZImageCLI --help
-./ZImageCLI control --help
+./ZImageCLI -p "a neon-lit alley in the rain" -o turbo.png
+```
+
+Base model:
+
+```bash
+./ZImageCLI \
+  -m Tongyi-MAI/Z-Image \
+  -p "a black tiger in a bamboo forest" \
+  --steps 50 \
+  --guidance 4 \
+  -o base.png
+```
+
+ControlNet:
+
+```bash
+./ZImageCLI control \
+  --prompt "a dancer on a stage" \
+  --control-image /path/to/pose.jpg \
+  --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
+  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
+  --output control.png
 ```
 
 ## Configuration
 
-Common knobs:
+Common CLI settings:
 
-- `--model/-m`: Hugging Face id (`org/repo[:revision]`), local model directory, or local `.safetensors`
-- `--cache-limit`: limit MLX GPU cache (MB)
-- `--max-sequence-length`: prompt encoding length (default 512)
+- `--model/-m`: Hugging Face repo id, local model directory, or local `.safetensors`
+- `--weights-variant`: precision-specific weights selection such as `fp16` or `bf16`
+- `--cache-limit`: MLX GPU cache limit in MB
+- `--max-sequence-length`: prompt token limit for text encoding
+- `--force-transformer-override-only`: treat a local `.safetensors` as a transformer override and skip AIO auto-detection
 
-Hugging Face cache location (used when downloading weights):
+Environment variables:
 
-- `HF_HUB_CACHE` (direct override), or
-- `HF_HOME` (uses `<HF_HOME>/hub`), or
-- default `~/.cache/huggingface/hub`
+- `HF_HUB_CACHE` or `HF_HOME`: override the Hugging Face cache location
+- `HF_TOKEN`: practical choice for gated or private Hugging Face repos
+- `HF_ENDPOINT`: override the Hugging Face API host
 
-See `docs/MODELS_AND_WEIGHTS.md` for the full model-resolution behavior (AIO checkpoints, transformer overrides, quantization manifests, etc.).
+The authoritative details for model resolution, cache lookup, AIO checkpoints, quantization manifests, and ControlNet weight loading live in [docs/MODELS_AND_WEIGHTS.md](docs/MODELS_AND_WEIGHTS.md).
 
-## Examples
+## Current Limitations
 
-Assuming you’re running from `.build/xcode/Build/Products/Release` (see Quickstart):
-
-```bash
-# Basic generation
-./ZImageCLI -p "a cute cat sitting on a windowsill" -o cat.png
-
-# Portrait image with custom size
-./ZImageCLI -p "portrait of a woman in renaissance style" -W 768 -H 1152 -o portrait.png
-
-# Using a quantized model (example HF repo id)
-./ZImageCLI -p "a futuristic city at night" -m mzbac/Z-Image-Turbo-8bit -o city.png
-
-# With memory limit
-./ZImageCLI -p "abstract art" --cache-limit 2048 -o art.png
-
-# With LoRA
-./ZImageCLI -p "a lion" --lora ostris/z_image_turbo_childrens_drawings -o lion.png
-```
-
-## LoRA
-
-Apply LoRA weights for style customization:
-
-```bash
-./ZImageCLI -p "a lion" --lora ostris/z_image_turbo_childrens_drawings --lora-scale 1.0 -o lion.png
-```
-
-### LoRA Example
-
-<table width="100%">
-<tr>
-<th>Prompt</th>
-<th>LoRA</th>
-<th>Output</th>
-</tr>
-<tr>
-<td>a lion</td>
-<td><a href="https://huggingface.co/ostris/z_image_turbo_childrens_drawings">ostris/z_image_turbo_childrens_drawings</a></td>
-<td><img src="examples/lora_lion.png" height="256"></td>
-</tr>
-</table>
-
-## ControlNet
-
-Generate images with ControlNet conditioning using Canny, HED, Depth, Pose, or MLSD control images:
-
-```bash
-./ZImageCLI control \
-  --prompt "A hyper-realistic close-up portrait of a leopard" \
-  --control-image /path/to/canny_edges.jpg \
-  --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
-  --control-scale 0.75 \
-  --output leopard.png
-```
-
-For all options, run:
-
-```bash
-./ZImageCLI control --help
-```
-
-### ControlNet Examples
-
-| Control Type | Prompt | Control Image | Output |
-|--------------|--------|---------------|--------|
-| Canny | A hyper-realistic close-up portrait of a leopard face hiding behind dense green jungle leaves, camouflaged, direct eye contact, intricate fur detail, bright yellow eyes, cinematic lighting, soft shadows, National Geographic photography, 8k, sharp focus, depth of field | ![Canny](images/canny.jpg) | ![Canny Output](examples/canny.png) |
-| HED | A photorealistic film still of a man in a dark shirt sitting at a dining table in a modern kitchen at night, looking down at a bowl of soup. A glass bottle and a glass of white wine are in the foreground. Warm, low, cinematic lighting, soft shadows, shallow depth of field, contemplative atmosphere, highly detailed. | ![HED](images/hed.jpg) | ![HED Output](examples/hed.png) |
-| Depth | A hyperrealistic architectural photograph of a spacious, minimalist modern hallway interior. Large floor-to-ceiling windows on the right wall fill the space with bright natural daylight. A light gray sectional sofa and a low, modern coffee table are placed in the foreground on a light wood floor. A large potted plant is visible further down the hallway. Besides the plant, the hallway extends into the darkness, suggesting further space. White walls, clean lines, serene atmosphere, highly detailed, 8k resolution, cinematic lighting | ![Depth](images/depth.jpg) | ![Depth Output](examples/depth.png) |
-| Pose | 一位年轻女子站在阳光明媚的海岸线上，白裙在轻拂的海风中微微飘动。她拥有一头鲜艳的紫色长发，在风中轻盈舞动... | ![Pose](images/pose.jpg) | ![Pose Output](examples/pose.png) |
-
-Note:
-- generated with `--negative-prompt "卡通,油画质感,低分辨率,塑料材质,光滑"` and `--control-scale 0.75`
-- ControlNet weights: `alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1`
-- Control file: `Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors`
-
-## Example Text To Image Output
-
-| Prompt | Output |
-|--------|--------|
-| A dramatic, cinematic japanese-action scene in a edo era Kyoto city. A woman named Harley Quinn from the movie "Birds of Prey" in colorful, punk-inspired comic-villain attire walks confidently while holding the arm of a serious-looking man named John Wick played by Keanu Reeves from the fantastic film John Wick 2 in a black suit, her t-shirt says "Birds of Prey", the characters are capture in a postcard held by a hand in front of a beautiful realistic city at sunset and there is cursive writing that says "ZImage, Now in MLX" | ![Output](examples/z-image.png) |
-
-## Quantization
-
-Quantize the model to reduce memory usage:
-
-```bash
-./ZImageCLI quantize -i models/z-image-turbo -o models/z-image-turbo-q8 --bits 8 --group-size 32 --verbose
-```
-
-ControlNet quantization is available via `./ZImageCLI quantize-controlnet ...` (see `docs/CLI.md`).
-
-## Dependencies
-
-- [mlx-swift](https://github.com/ml-explore/mlx-swift) - MLX bindings for Swift
-- [swift-huggingface](https://github.com/huggingface/swift-huggingface) - Hugging Face Hub access
-- [swift-transformers](https://github.com/huggingface/swift-transformers) - tokenizers
-- [swift-log](https://github.com/apple/swift-log) - logging
-
-## Limitations / Known Gaps
-
-- The CLI target is macOS-only (the package also declares an iOS library target).
-- First run may download many GB of weights; high resolutions can be memory-heavy on unified memory systems.
-- Hugging Face gated/private repos require authentication (e.g. `HF_TOKEN`). If downloads fail, download locally and point `--model` at a local path.
+- CLI defaults remain Turbo-oriented even when `--model Tongyi-MAI/Z-Image` is selected, so Base runs should set `--steps` and `--guidance` explicitly.
+- `ZImageCLI control` exposes control, inpainting, and `--log-control-memory`, but it does not currently expose the control-pipeline LoRA and prompt-enhancement hooks that exist in the library request type.
+- First-time downloads are large, and high-resolution runs can still be memory-heavy on unified-memory systems.
+- The CLI target is macOS-only. The package also declares an iOS library target, but there is no first-party sample app in this repo.
 
 ## Docs
 
-- [`docs/README.md`](docs/README.md) — docs index / “start here”
-- [`docs/CLI.md`](docs/CLI.md) — CLI usage and subcommands
-- [`docs/MODELS_AND_WEIGHTS.md`](docs/MODELS_AND_WEIGHTS.md) — model specs, caches, AIO, overrides, quantization
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — code architecture and source-of-truth pointers
-- [`docs/dev_plans/ROADMAP.md`](docs/dev_plans/ROADMAP.md) — prioritized next steps
+- [docs/README.md](docs/README.md): docs index and task-based reading order
+- [docs/CLI.md](docs/CLI.md): CLI usage, flags, and examples
+- [docs/MODELS_AND_WEIGHTS.md](docs/MODELS_AND_WEIGHTS.md): model selection, caching, AIO checkpoints, overrides, quantization
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): code structure and source-of-truth files
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): build, test, lint, CI, and validation workflows
+- [docs/dev_plans/ROADMAP.md](docs/dev_plans/ROADMAP.md): prioritized next steps
 
 ## Next Steps
 
-See `docs/dev_plans/ROADMAP.md`.
-
-## Documentation Changelog
-
-- Added: `docs/README.md`, `docs/CLI.md`, `docs/MODELS_AND_WEIGHTS.md`, `docs/DEVELOPMENT.md`, `docs/dev_plans/ROADMAP.md`.
-- Restructured: moved architecture doc to `docs/ARCHITECTURE.md`, moved `docs/CODE_QUALITY_REPORT.md` into `docs/archive/`.
-- Removed/updated: outdated README dependency list and CLI flag details; README now links to `docs/` as the source of truth.
+The current roadmap is kept in [docs/dev_plans/ROADMAP.md](docs/dev_plans/ROADMAP.md).
 
 ## License
 

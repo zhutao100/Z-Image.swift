@@ -1,114 +1,190 @@
 # CLI Guide (`ZImageCLI`)
 
-This project ships a macOS CLI executable target: `ZImageCLI`.
+`ZImageCLI` is the macOS executable in this repo. The authoritative option list lives in `Sources/ZImageCLI/main.swift`; this document is the stable usage guide around it.
 
-## Build
+## Build And Locate The Binary
 
-Build a release binary with Xcode:
+Fast path:
+
+```bash
+./scripts/build.sh
+```
+
+Explicit build command:
 
 ```bash
 xcodebuild -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
 ```
 
-Tip: if Xcode prompts about a package plugin (MLX metal shader preparation), allow it. In CI/non-interactive builds, see `docs/DEVELOPMENT.md`.
-
-Run the binary from the build products directory:
+Run from the release products directory:
 
 ```bash
 cd .build/xcode/Build/Products/Release
 ./ZImageCLI --help
+./ZImageCLI control --help
 ```
 
-## Text-to-Image
+If Xcode prompts about the MLX shader-preparation package plugin, allow it. For non-interactive or CI builds, see [DEVELOPMENT.md](DEVELOPMENT.md).
+
+## Command Summary
+
+- `ZImageCLI`: text-to-image generation
+- `ZImageCLI control`: ControlNet conditioning and inpainting
+- `ZImageCLI quantize`: quantize base-model weights
+- `ZImageCLI quantize-controlnet`: quantize ControlNet weights
+
+## Text-To-Image
+
+Minimal run:
 
 ```bash
-./ZImageCLI -p "A beautiful mountain landscape at sunset" -o output.png
+./ZImageCLI -p "a mountain lake at sunrise" -o output.png
 ```
 
-Common flags:
+Useful flags:
 
-- `--width/-W`, `--height/-H` (defaults: `ZImageModelMetadata.recommendedWidth/Height`)
-- `--steps/-s`, `--guidance/-g` (defaults: `ZImageModelMetadata.recommendedInferenceSteps/GuidanceScale`)
-- `--model/-m` (defaults to `Tongyi-MAI/Z-Image-Turbo`)
-- `--weights-variant` (optional HF precision variant like `fp16` / `bf16`)
-- `--max-sequence-length` (default: 512)
-- `--cache-limit` (GPU cache limit in MB; default: unlimited)
+- `--prompt/-p`: required prompt
+- `--negative-prompt/--np`: optional negative prompt
+- `--width/-W`, `--height/-H`: output size
+- `--steps/-s`, `--guidance/-g`: denoising and CFG settings
+- `--seed`: deterministic sampling seed
+- `--output/-o`: output path, default `z-image.png`
+- `--model/-m`: model id, local directory, or local `.safetensors`
+- `--weights-variant`: precision-specific weight selection such as `fp16` or `bf16`
+- `--force-transformer-override-only`: force a local `.safetensors` to be treated as a transformer override instead of AIO
+- `--cache-limit`: MLX cache limit in MB
+- `--max-sequence-length`: text-encoding token cap, default `512`
+- `--lora/-l`, `--lora-scale`: text-to-image LoRA support
+- `--enhance/-e`, `--enhance-max-tokens`: prompt enhancement through the Qwen text encoder
+- `--no-progress`: disable progress output
 
-Run `./ZImageCLI --help` for the complete, authoritative option list (kept in `Sources/ZImageCLI/main.swift`).
+### Important Default Behavior
+
+The CLI defaults are tuned for `Tongyi-MAI/Z-Image-Turbo`:
+
+- width: `1024`
+- height: `1024`
+- steps: `9`
+- guidance: `0.0`
+
+Those defaults do not change automatically when you pass `--model Tongyi-MAI/Z-Image`, so Base runs should set the relevant knobs explicitly:
+
+```bash
+./ZImageCLI \
+  --model Tongyi-MAI/Z-Image \
+  --prompt "a black tiger in a bamboo forest" \
+  --steps 50 \
+  --guidance 4 \
+  --output base.png
+```
 
 ## Model Specs (`--model`)
 
-`--model/-m` supports:
+`--model/-m` accepts:
 
-- Hugging Face model id: `org/repo` (optionally `org/repo:revision`)
-- Local model directory (Diffusers-style layout)
-- Local `.safetensors` file:
-  - AIO checkpoint (transformer + text encoder + VAE in one file), **or**
-  - Transformer-only override layered on top of the base model
+- Hugging Face repo id: `org/repo`
+- Hugging Face repo id with revision: `org/repo:revision`
+- Local Diffusers-style model directory
+- Local `.safetensors`
+  - AIO checkpoint if the file contains all expected components
+  - transformer-only override otherwise
 
-See `docs/MODELS_AND_WEIGHTS.md` for details and edge cases.
+See [MODELS_AND_WEIGHTS.md](MODELS_AND_WEIGHTS.md) for resolver details.
 
 ## LoRA
 
+Text-to-image LoRA usage:
+
 ```bash
-./ZImageCLI -p "a lion" --lora ostris/z_image_turbo_childrens_drawings --lora-scale 1.0 -o lion.png
+./ZImageCLI \
+  -p "a lion painted like a children's book illustration" \
+  --lora ostris/z_image_turbo_childrens_drawings \
+  --lora-scale 1.0 \
+  -o lion.png
 ```
 
-Notes:
+`--lora` accepts a local path or a Hugging Face repo id.
 
-- `--lora` accepts a local path or a Hugging Face repo id.
-- `--lora-scale` is clamped to `[0.0, 1.0]`.
-- If a Hugging Face LoRA repo contains multiple `.safetensors`, the loader currently picks the first one; use a local path when you need a specific filename.
-
-## Prompt Enhancement (Optional)
+## Prompt Enhancement
 
 ```bash
 ./ZImageCLI -p "cat with a hat" --enhance --enhance-max-tokens 512 -o cat.png
 ```
 
-This uses the Qwen text encoder in “LLM mode” to rewrite the prompt before generation. It increases memory usage (see the CLI help text for current guidance).
+This re-prompts through the Qwen text encoder's generation path before normal encoding. It increases memory use and is currently exposed on the text-to-image CLI only.
 
-## ControlNet + Inpainting
+## ControlNet And Inpainting
+
+Minimal ControlNet example:
 
 ```bash
 ./ZImageCLI control \
-  --prompt "A hyper-realistic close-up portrait of a leopard" \
-  --control-image /path/to/canny_edges.jpg \
+  --prompt "a dancer on a stage" \
+  --control-image /path/to/pose.jpg \
   --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
   --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
-  --control-scale 0.75 \
-  --output leopard.png
+  --output control.png
 ```
 
-For inpainting, provide `--inpaint-image` and `--mask`:
+Inpainting example:
 
 ```bash
-./ZImageCLI control -p "a dancer" -c pose.jpg -i photo.jpg --mask mask.png \
-  --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors --cs 0.75 -s 25
+./ZImageCLI control \
+  --prompt "restore the missing area as a stained-glass window" \
+  --inpaint-image /path/to/photo.png \
+  --mask /path/to/mask.png \
+  --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
+  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
+  --output inpaint.png
 ```
 
-Run `./ZImageCLI control --help` for the complete option list and control image expectations.
+Important `control` flags:
 
-Useful control-only diagnostics:
+- `--prompt/-p`: required
+- `--control-image/-c`: optional control image
+- `--inpaint-image/-i`: optional inpaint source
+- `--mask` or `--mask-image`: optional mask for inpainting
+- `--controlnet-weights/--cw`: required ControlNet source
+- `--control-file/--cf`: optional file selector within a repo or directory
+- `--control-scale/--cs`: control-context scale, default `0.75`
+- `--width/-W`, `--height/-H`, `--steps/-s`, `--guidance/-g`
+- `--weights-variant`, `--cache-limit`, `--max-sequence-length`, `--no-progress`
+- `--log-control-memory`: emit control-path memory markers
 
-- `--log-control-memory` emits process-resident and MLX memory markers around prompt encoding, control-context construction, the post-build cache-release barrier, denoising start, and final decode.
+At least one of `--control-image`, `--inpaint-image`, or `--mask` must be present.
 
-The control pipeline now unloads the transformer, ControlNet, and active LoRA state before `buildControlContext(...)`, loads an encoder-only VAE only for control or inpaint encode, then reloads the transformer stack before denoising and defers decoder-only VAE loading until final decode. The temporary attention-disable CLI switch used during the remediation investigation was removed after it failed to lower the measured peak materially.
+Current limitation: `ZImageCLI control` does not currently expose the control-pipeline LoRA or prompt-enhancement fields that exist in the library request type.
 
 ## Quantization
 
-Quantize the base model:
+Base-model quantization:
 
 ```bash
-./ZImageCLI quantize -i models/z-image-turbo -o models/z-image-turbo-q8 --bits 8 --group-size 32 --verbose
+./ZImageCLI quantize \
+  --input models/z-image-turbo \
+  --output models/z-image-turbo-q8 \
+  --bits 8 \
+  --group-size 32 \
+  --verbose
 ```
 
-Quantize ControlNet weights:
+ControlNet quantization:
 
 ```bash
-./ZImageCLI quantize-controlnet -i alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors -o controlnet-2.1-q8 --verbose
+./ZImageCLI quantize-controlnet \
+  --input alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
+  --file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
+  --output controlnet-2.1-q8 \
+  --bits 8 \
+  --group-size 32 \
+  --verbose
 ```
 
-After quantization, point `--model` (or `--controlnet-weights`) at the output directory.
+After quantization, point `--model` or `--controlnet-weights` at the output directory.
+
+## Diagnostics
+
+- `--no-progress`: suppress progress reporting
+- `ZImageCLI control --log-control-memory`: log process-resident and MLX memory markers around prompt encoding, control-context construction, denoiser loading, and decode
+
+For the underlying control-memory policy and validation recipe, see [DEVELOPMENT.md](DEVELOPMENT.md).

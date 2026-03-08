@@ -1,39 +1,55 @@
 # Documentation
 
-This folder contains the reference docs for **Z-Image.swift** (the Swift + MLX port of `Tongyi-MAI/Z-Image-Turbo`).
+This folder is the reference set for the current `zimage.swift` codebase. Start with the root `README.md` if you want the shortest runnable path.
 
-If you’re new here, start with the root `README.md` for a runnable quickstart.
+## Core Docs
 
-## Start Here (Recommended Order)
+1. [CLI.md](CLI.md)
+   Build, run, and inspect `ZImageCLI`, including `control`, `quantize`, and `quantize-controlnet`.
+2. [MODELS_AND_WEIGHTS.md](MODELS_AND_WEIGHTS.md)
+   Model ids, local-path handling, Hugging Face cache behavior, AIO checkpoints, transformer overrides, and quantization manifests.
+3. [ARCHITECTURE.md](ARCHITECTURE.md)
+   Current code structure, data flow, and source-of-truth files.
+4. [DEVELOPMENT.md](DEVELOPMENT.md)
+   Build, test, lint, CI, and targeted validation workflows.
+5. [dev_plans/ROADMAP.md](dev_plans/ROADMAP.md)
+   Short prioritized list of next iterations.
 
-1. [`docs/CLI.md`](CLI.md) — build + run the CLI, examples, flags, and subcommands.
-2. [`docs/MODELS_AND_WEIGHTS.md`](MODELS_AND_WEIGHTS.md) — how model specs, caches, quantization, overrides, and AIO checkpoints work.
-3. [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — code-level architecture and “where to look”.
-4. [`docs/z-image-turbo.md`](z-image-turbo.md), [`docs/z-image.md`](z-image.md)— upstream model layout notes (Diffusers/HF reference).
-5. [`docs/dev_plans/ROADMAP.md`](dev_plans/ROADMAP.md) — prioritized next steps.
+## Read By Task
 
-## “Source Of Truth” Pointers
+- Running the CLI or updating help text:
+  - [CLI.md](CLI.md)
+  - `Sources/ZImageCLI/main.swift`
+- Model loading, caches, or safetensors behavior:
+  - [MODELS_AND_WEIGHTS.md](MODELS_AND_WEIGHTS.md)
+  - `Sources/ZImage/Weights/*`
+- General code navigation:
+  - [ARCHITECTURE.md](ARCHITECTURE.md)
+- Build, CI, packaging, or release work:
+  - [DEVELOPMENT.md](DEVELOPMENT.md)
+  - `.github/workflows/ci.yml`
+- Upstream checkpoint structure:
+  - [z-image-turbo.md](z-image-turbo.md)
+  - [z-image.md](z-image.md)
 
-- CLI behavior + flags: `Sources/ZImageCLI/main.swift`
-- Text-to-image pipeline API: `Sources/ZImage/Pipeline/ZImagePipeline.swift`
-- ControlNet/inpaint pipeline API: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
-- Weight download / cache resolution: `Sources/ZImage/Weights/ModelResolution.swift`
-- Weight mapping into MLX modules: `Sources/ZImage/Weights/WeightsMapping.swift`, `Sources/ZImage/Weights/ZImageWeightsMapper.swift`
-- Quantization: `Sources/ZImage/Quantization/ZImageQuantization.swift`
-- LoRA: `Sources/ZImage/LoRA/*`
-- Unit tests: `Tests/ZImageTests/*`
+## Supporting Context
 
-## Current context / investigations
+- [golden_checks.md](golden_checks.md): guidance for numerical-parity fixtures and diagnostics
+- [context/zimage_runtime_precision_parity_report.md](context/zimage_runtime_precision_parity_report.md): current precision-parity findings
+- [context/mlx_pytorch_bf16_inference_dtype_deep_dive.md](context/mlx_pytorch_bf16_inference_dtype_deep_dive.md): backend-level BF16 notes
+- [context/precision_formats_on_apple_silicon.md](context/precision_formats_on_apple_silicon.md): broader Apple Silicon precision background
 
-- [`docs/debug_notes/control-context-memory-remediation.md`](debug_notes/control-context-memory-remediation.md) — validated current-state diagnosis for the control-path memory issue, including the March 7, 2026 high-resolution probe.
-- [`docs/debug_notes/controlnet-memory-analysis.md`](debug_notes/controlnet-memory-analysis.md) — pruned ControlNet-specific follow-up analysis that keeps only the post-remediation findings still true in the current repo state.
-- [`docs/dev_plans/control-context-memory-remediation.md`](dev_plans/control-context-memory-remediation.md) — completed remediation plan and measurement log for phases 1 through 3.
-- [`docs/dev_plans/controlnet-memory-followup.md`](dev_plans/controlnet-memory-followup.md) — active follow-up plan, including the completed March 8, 2026 deferred denoiser-load and telemetry phases plus the decision to stop before tiled encode.
-- [`docs/context/zimage_runtime_precision_parity_report.md`](context/zimage_runtime_precision_parity_report.md) — confirmed parity, confirmed mismatches, and runtime hypotheses for Swift vs Diffusers precision handling.
-- [`docs/dev_plans/runtime_precision_parity_improvement_plan.md`](dev_plans/runtime_precision_parity_improvement_plan.md) — measured execution plan for the first runtime precision parity fixes.
-- [`docs/context/mlx_pytorch_bf16_inference_dtype_deep_dive.md`](context/mlx_pytorch_bf16_inference_dtype_deep_dive.md) — backend-level BF16 behavior notes for MLX and PyTorch/MPS.
-- [`docs/context/precision_formats_on_apple_silicon.md`](context/precision_formats_on_apple_silicon.md) — broader Apple Silicon precision-format background.
+## Active Focused Plans
+
+- [dev_plans/controlnet-memory-followup.md](dev_plans/controlnet-memory-followup.md): targeted follow-up for the control-path memory story
+- [dev_plans/runtime_precision_parity_improvement_plan.md](dev_plans/runtime_precision_parity_improvement_plan.md): next precision-parity fixes under consideration
+
+Completed investigations that still explain the current control-memory policy remain in:
+
+- [debug_notes/control-context-memory-remediation.md](debug_notes/control-context-memory-remediation.md)
+- [debug_notes/controlnet-memory-analysis.md](debug_notes/controlnet-memory-analysis.md)
+- [dev_plans/control-context-memory-remediation.md](dev_plans/control-context-memory-remediation.md)
 
 ## Archive
 
-Older “point in time” investigation docs live under [`docs/archive/`](archive/README.md) (not required reading, may be stale).
+Historical investigations and completed implementation plans live under [archive/](archive/README.md). They can still be useful, but they are not the source of truth for current behavior.

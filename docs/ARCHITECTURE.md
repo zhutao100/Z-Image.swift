@@ -1,130 +1,164 @@
 # Architecture
 
-This document explains **how the codebase is structured today** and where the main “source of truth” entry points live.
+This document maps the current implementation to the source files that define it. For runnable commands, start with the root `README.md` and [CLI.md](CLI.md).
 
-For a runnable quickstart, see the root `README.md`.
+## Overview
 
-## Executive Summary
+`zimage.swift` is a native Swift + MLX port of the `Tongyi-MAI/Z-Image` family. It provides:
 
-**ZImage.swift** is a native Swift implementation of the `Tongyi-MAI/Z-Image-Turbo` text-to-image model built on top of **MLX (mlx-swift)**. It ships as:
+- `ZImage`: library API
+- `ZImageCLI`: macOS CLI wrapper
 
-- A library product: `ZImage`
-- A CLI executable: `ZImageCLI`
+The major runtime pieces are:
 
-At a high level, the project implements a full DiT pipeline:
+1. tokenizer and Qwen text encoder
+2. diffusion transformer and Flow Match scheduler
+3. VAE encode/decode path
+4. weight resolution and safetensors mapping
+5. optional LoRA and quantization layers
 
-- **Tokenizer + Qwen text encoder** → prompt embeddings (and optional prompt enhancement)
-- **Diffusion Transformer (DiT)** → denoising loop driven by Flow-Matching
-- **VAE** → decode latents → PNG output
-
-## Technology Stack
-
-- Swift 6.0+ (Package.swift uses Swift tools 6.0)
-- MLX Swift (`MLX`, `MLXNN`, `MLXFast`, `MLXRandom`) for tensor compute (Metal / CPU fallback)
-- `swift-huggingface` for Hugging Face Hub access
-- `swift-transformers` for tokenizers
-- `swift-log` for logging
-- CoreGraphics / ImageIO for image I/O (where available)
-
-## Repository Map
-
-- CLI entry point: `Sources/ZImageCLI/main.swift`
-- Pipelines: `Sources/ZImage/Pipeline/*`
-  - `ZImagePipeline.swift` (text-to-image + LoRA + optional prompt enhancement)
-  - `ZImageControlPipeline.swift` (ControlNet + inpaint + optional prompt enhancement)
-  - `FlowMatchScheduler.swift` (`FlowMatchEulerScheduler`)
-- Models: `Sources/ZImage/Model/*`
-  - Text encoder (Qwen): `Sources/ZImage/Model/TextEncoder/*`
-  - Transformer (DiT): `Sources/ZImage/Model/Transformer/*`
-  - VAE: `Sources/ZImage/Model/VAE/*`
-- Weights / downloading / mapping: `Sources/ZImage/Weights/*`
-- LoRA: `Sources/ZImage/LoRA/*`
-- Quantization: `Sources/ZImage/Quantization/*`
-- Tests: `Tests/*` (unit / integration / e2e)
-
-## Public API (Library)
-
-The library surface is intentionally small and “pipeline-first”:
-
-- `ZImageGenerationRequest` + `ZImagePipeline`
-  - `Sources/ZImage/Pipeline/ZImagePipeline.swift`
-- `ZImageControlGenerationRequest` + `ZImageControlPipeline`
-  - `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
-
-The CLI is a thin wrapper around these pipelines:
+## High-Level File Map
 
 - `Sources/ZImageCLI/main.swift`
+  - CLI argument parsing, subcommands, progress reporting, and user-facing help text
+- `Sources/ZImage/Pipeline/`
+  - `ZImagePipeline.swift`: text-to-image pipeline
+  - `ZImageControlPipeline.swift`: ControlNet and inpainting pipeline
+  - `FlowMatchScheduler.swift`: scheduler implementation
+  - `PipelineSnapshot.swift`: snapshot download and file-pattern helpers
+  - `PipelineUtilities.swift`: shared prompt-encoding and snapshot helpers
+- `Sources/ZImage/Model/`
+  - `TextEncoder/`: Qwen tokenizer-facing encoder and optional generation path for prompt enhancement
+  - `Transformer/`: base and control transformer blocks
+  - `VAE/`: encode/decode implementation
+- `Sources/ZImage/Weights/`
+  - Hugging Face resolution, local-path handling, safetensors reader, AIO detection, tensor mapping
+- `Sources/ZImage/Quantization/`
+  - quantization manifest format and quantize commands
+- `Sources/ZImage/LoRA/`
+  - LoRA/LoKr parsing, mapping, and application
+- `Sources/ZImage/Support/`
+  - model metadata and known-model registry
+- `Sources/ZImage/Util/`
+  - image I/O and control-memory telemetry
 
-## Model Loading & Weight Resolution
+## Public Library Surface
 
-The pipeline accepts a `--model` spec that can be:
+The library is pipeline-first:
 
-- A Hugging Face repo id: `org/repo` (optionally `org/repo:revision`)
-- A local directory containing a Diffusers-style layout (e.g. `transformer/`, `text_encoder/`, `vae/`, `tokenizer/`)
-- A local `.safetensors` file:
-  - Treated as an **AIO checkpoint** if it contains transformer + text encoder + VAE tensors with recognized key prefixes
-  - Otherwise treated as a **transformer-only override** layered on top of the base model
+- `ZImageGenerationRequest` + `ZImagePipeline`
+- `ZImageControlGenerationRequest` + `ZImageControlPipeline`
 
-Key code:
+Current asymmetry to know about:
 
-- Cache / download resolution: `Sources/ZImage/Weights/ModelResolution.swift`
-- Model selection logic (AIO vs override): `Sources/ZImage/Pipeline/ZImagePipeline.swift` (`resolveModelSelection`)
-- AIO inspection + canonicalization: `Sources/ZImage/Weights/AIOCheckpoint.swift`
+- the library control request type already has LoRA and prompt-enhancement fields
+- `ZImageCLI control` does not currently expose those flags
 
-## Quantization
+## Model Selection And Snapshot Loading
 
-Quantized weights are represented as a regular model folder plus a manifest:
+The runtime treats model specs in four forms:
 
-- Base model: `quantization.json`
-- ControlNet: `controlnet_quantization.json`
+- default repo id from `ZImageRepository.id`
+- Hugging Face repo id, optionally with `:revision`
+- local Diffusers-style directory
+- local `.safetensors`
+  - AIO checkpoint when it contains all expected components
+  - transformer-only override otherwise
 
-Key code:
+The loading path is split across:
 
-- Quantization implementation: `Sources/ZImage/Quantization/ZImageQuantization.swift`
-- Applying quantization when loading weights: `Sources/ZImage/Weights/WeightsMapping.swift`
+- `Sources/ZImage/Weights/ModelResolution.swift`
+- `Sources/ZImage/Pipeline/PipelineSnapshot.swift`
+- `Sources/ZImage/Pipeline/ZImagePipeline.swift`
+- `Sources/ZImage/Weights/AIOCheckpoint.swift`
 
-## LoRA
+Known model ids and per-model presets are centralized in `Sources/ZImage/Support/ZImageModelRegistry.swift`. Those presets are used by library code and tests, but the CLI still seeds its defaults directly from `ZImageModelMetadata`, so its default flags remain Turbo-oriented.
 
-LoRA can be loaded from a local path or a Hugging Face repo id. The loader supports:
+## Weight Mapping
 
-- Classic LoRA pairs (`lora_down`/`lora_up`, or `lora_A`/`lora_B`)
-- LyCORIS LoKr (`lokr_w1`/`lokr_w2`)
+Once a snapshot or local source is resolved, config JSONs are loaded through `ZImageModelConfigs` and tensor files are mapped into MLX modules through:
 
-Key code:
+- `Sources/ZImage/Weights/ZImageWeightsMapper.swift`
+- `Sources/ZImage/Weights/WeightsMapping.swift`
+- `Sources/ZImage/Weights/ZImageControlWeightsMapping.swift`
+- `Sources/ZImage/Weights/ModuleWeightsApplier.swift`
 
-- CLI flag parsing: `Sources/ZImageCLI/main.swift` (`--lora`, `--lora-scale`)
-- Loader + validation: `Sources/ZImage/LoRA/LoRAWeightLoader.swift`
-- Application: `Sources/ZImage/LoRA/LoRAApplicator.swift`
+Weights-variant handling is part of the mapping layer, not just the downloader. Resolver and mapper code coordinate to avoid mixed `fp16`/`bf16` shard loads.
 
-## Data Flow (Text-to-Image)
+## Text-To-Image Flow
 
-1. Prompt text (and optional negative prompt)
-2. Optional prompt enhancement via the Qwen text encoder (LLM mode)
-3. Tokenize + encode to prompt embeddings
-4. Initialize random latents
-5. Denoising loop: transformer → scheduler steps (`FlowMatchEulerScheduler`)
-6. Decode latents via VAE
-7. Write PNG (`ImageIO`)
+`ZImagePipeline.generate(...)` currently does this:
 
-## Control-Path Memory Policy
+1. resolve model source and load configs
+2. load tokenizer, text encoder, transformer, and VAE decoder as needed
+3. optionally load or swap LoRA
+4. optionally enhance the prompt through the Qwen generation path
+5. tokenize and encode prompt and optional negative prompt
+6. run the denoising loop through the diffusion transformer and scheduler
+7. decode final latents through the VAE decoder
+8. write PNG output or return encoded bytes
 
-`ZImageControlPipeline` uses a narrower residency window than the base text-to-image path when it constructs control context for large images:
+Source of truth: `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 
-1. Prompt embeddings are computed and cached.
-2. The transformer, ControlNet, and active LoRA state are unloaded before `buildControlContext(...)`.
-3. An encoder-only VAE is loaded on demand, then control and inpaint inputs are VAE-encoded while the baseline residency is low.
-4. The stored control-context tensor is materialized, the encoder-only VAE is released, and MLX cache is cleared.
-5. The transformer, ControlNet, and LoRA state are reloaded before denoising starts.
-6. A decoder-only VAE is loaded only for final decode, then released immediately afterward.
+## ControlNet And Inpainting Flow
 
-The VAE mid-block self-attention in `Sources/ZImage/Model/VAE/AutoencoderKL.swift` now chunks the query dimension internally to reduce large-image MLX cache pressure without changing weights. The supported runtime probe for this path is `ZImageCLI control --log-control-memory`.
+`ZImageControlPipeline.generate(...)` adds:
 
-Inside the ControlNet denoiser, accumulated skip hints are now carried incrementally instead of being re-stacked at every control block. That keeps the external `ZImageControlBlockSamples` contract unchanged while avoiding a large denoising-memory multiplier.
+- control-image encoding
+- optional inpaint-image and mask encoding
+- separate ControlNet weight loading
+- control-context construction before denoising
+- cached prompt embeddings across repeated runs
+
+The CLI requires `--controlnet-weights` plus at least one of `--control-image`, `--inpaint-image`, or `--mask`.
+
+Source of truth: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
+
+## Current Control-Memory Policy
+
+The control pipeline intentionally narrows module residency while building control context:
+
+1. prompt embeddings are produced and cached
+2. transformer, ControlNet, and active LoRA state are unloaded when they are not needed for control-context construction
+3. an encoder-only VAE is loaded for control or inpaint encoding and unloaded again after the typed control-context tensor is materialized
+4. MLX cache is cleared before denoiser modules are reloaded
+5. a decoder-only VAE is loaded only for final decode
+
+Supporting implementation points:
+
+- `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
+- `Sources/ZImage/Util/ControlMemoryTelemetry.swift`
+- `Sources/ZImage/Model/VAE/AutoencoderKL.swift`
+
+The supported runtime probe for that path is `ZImageCLI control --log-control-memory`.
+
+## Quantization And LoRA
+
+Quantization is manifest-driven:
+
+- `quantization.json` for base-model directories
+- `controlnet_quantization.json` for ControlNet directories
+
+Relevant code:
+
+- `Sources/ZImage/Quantization/ZImageQuantization.swift`
+- `Sources/ZImage/Weights/WeightsMapping.swift`
+
+LoRA support is split into three stages:
+
+1. source resolution and validation in `Sources/ZImage/LoRA/LoRAWeightLoader.swift`
+2. key remapping in `Sources/ZImage/LoRA/LoRAKeyMapper.swift`
+3. application or removal in `Sources/ZImage/LoRA/LoRAApplicator.swift`
 
 ## Tests
 
-- Unit tests: `Tests/ZImageTests/` (fast, no model downloads)
-- Integration tests: `Tests/ZImageIntegrationTests/` (require weights, slower)
-- E2E tests: `Tests/ZImageE2ETests/` (build + run the CLI)
+- `Tests/ZImageTests/`: default fast suite
+- `Tests/ZImageIntegrationTests/`: slower, weight-dependent tests
+- `Tests/ZImageE2ETests/`: build and run the CLI
 
-For agent workflows / what to run by default, see `AGENTS.md`.
+If you need to understand intended behavior before touching code, inspect the matching unit tests first, especially:
+
+- `Tests/ZImageTests/Weights/*`
+- `Tests/ZImageTests/Support/*`
+- `Tests/ZImageTests/Quantization/*`
+- `Tests/ZImageTests/Scheduler/*`
