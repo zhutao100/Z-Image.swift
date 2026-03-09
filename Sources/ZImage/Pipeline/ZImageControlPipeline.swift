@@ -633,7 +633,7 @@ public class ZImageControlPipeline {
     if let config = requestedConfig {
       logger.info("Loading LoRA from \(config.source.displayName)...")
       let loraWeights = try await LoRAWeightLoader.load(from: config)
-      logger.info("Loaded LoRA: rank=\(loraWeights.rank), alpha=\(loraWeights.alpha), layers=\(loraWeights.layerCount)")
+      logger.info("Loaded adapter: \(loraWeights.logSummary)")
       LoRAApplicator.applyDynamically(to: transformer, loraWeights: loraWeights, scale: config.scale, logger: logger)
       currentLoRA = loraWeights
       currentLoRAConfig = config
@@ -845,7 +845,8 @@ public class ZImageControlPipeline {
       var enhancedPromptForCache: String? = nil
       do {
         let textEncoder = try loadTextEncoder(snapshot: snapshot, config: modelConfigs.textEncoder)
-        let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
+        let weightsMapper = ZImageWeightsMapper(
+          snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
         let textEncoderWeights = try weightsMapper.loadTextEncoder()
         ZImageWeightsMapping.applyTextEncoder(
           weights: textEncoderWeights, to: textEncoder, manifest: quantManifest, logger: logger)
@@ -1099,6 +1100,10 @@ public class ZImageControlPipeline {
         }
         latents = scheduler.step(modelOutput: -guidedNoise, timestepIndex: stepIndex, sample: latents)
         MLX.eval(latents)
+        try PipelineUtilities.validateTensorStability(
+          latents,
+          name: "control latents after denoising step \(stepIndex + 1)"
+        )
       }
       transformer.clearCache()
       controlnet?.clearCache()
@@ -1120,7 +1125,12 @@ public class ZImageControlPipeline {
       ))
     logger.info("Denoising complete, decoding latents...")
     let vaeDecoder = try prepareVAEDecoder(snapshot: snapshot, config: modelConfigs.vae)
-    let decoded = PipelineUtilities.decodeLatents(latents, vae: vaeDecoder, height: request.height, width: request.width)
+    let decoded = try PipelineUtilities.decodeLatents(
+      latents,
+      vae: vaeDecoder,
+      height: request.height,
+      width: request.width
+    )
     MLX.eval(decoded)
     logControlMemory("decode.after-eval", enabled: logPhaseMemory)
     unloadVAEDecoder()

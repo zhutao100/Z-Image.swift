@@ -655,7 +655,7 @@ public final class ZImagePipeline {
 
     do {
       let loraWeights = try await LoRAWeightLoader.load(from: config)
-      logger.info("Loaded LoRA: rank=\(loraWeights.rank), alpha=\(loraWeights.alpha), layers=\(loraWeights.layerCount)")
+      logger.info("Loaded adapter: \(loraWeights.logSummary)")
 
       LoRAApplicator.applyDynamically(to: trans, loraWeights: loraWeights, scale: config.scale, logger: logger)
 
@@ -841,7 +841,8 @@ public final class ZImagePipeline {
           embeds = MLX.concatenated([promptEmbeds, ne], axis: 0)
         }
 
-        let typedModelLatents = PipelineUtilities.castModelInputToRuntimeDTypeIfNeeded(modelLatents, module: transformer)
+        let typedModelLatents = PipelineUtilities.castModelInputToRuntimeDTypeIfNeeded(
+          modelLatents, module: transformer)
         let noisePred = transformer.forward(latents: typedModelLatents, timestep: timestepArray, promptEmbeds: embeds)
         let guidedNoise: MLXArray
         if applyCFG, negativeEmbeds != nil {
@@ -860,6 +861,10 @@ public final class ZImagePipeline {
 
         latents = scheduler.step(modelOutput: -guidedNoise, timestepIndex: stepIndex, sample: latents)
         MLX.eval(latents)
+        try PipelineUtilities.validateTensorStability(
+          latents,
+          name: "latents after denoising step \(stepIndex + 1)"
+        )
       }
       transformer.clearCache()
     }
@@ -869,7 +874,12 @@ public final class ZImagePipeline {
     logger.info("Denoising complete, decoding with VAE...")
     progressHandler?(GenerationProgress(stage: .decoding, stepIndex: request.steps, totalSteps: request.steps))
 
-    let decoded = PipelineUtilities.decodeLatents(latents, vae: vae, height: request.height, width: request.width)
+    let decoded = try PipelineUtilities.decodeLatents(
+      latents,
+      vae: vae,
+      height: request.height,
+      width: request.width
+    )
     MLX.eval(MLXArray([]))
     Memory.clearCache()
 

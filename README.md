@@ -123,6 +123,9 @@ Common CLI settings:
 - known `Tongyi-MAI` model ids apply model-aware presets:
   - Turbo: `1024x1024`, `9` steps, guidance `0.0`
   - Base: `1024x1024`, `50` steps, guidance `4.0`
+- `--steps/-s`: literal denoising iterations / transformer forwards
+  - the scheduler keeps one extra terminal sigma internally, so `8` steps means `8` transformer calls and `9` sigma values
+  - some upstream model cards mix that scheduler detail into the prose around Turbo's "8-step" distillation; this repo treats `steps` as the literal iteration count
 - `--cfg-normalization`: clamp CFG output norm back to the positive-branch norm
 - `--cfg-truncation`: turn CFG off after the normalized denoising timestep passes the given value
 - `--weights-variant`: precision-specific weights selection such as `fp16` or `bf16`
@@ -143,6 +146,7 @@ For repo-side regression checking against the real Base checkpoint, use the opt-
 ## Current Limitations
 
 - Model-aware CLI defaults currently key off the known `Tongyi-MAI` ids. Local paths and unknown aliases still fall back to Turbo-compatible defaults unless you set `--steps` and `--guidance` explicitly.
+- Third-party LoRA cards can recommend sampling settings that differ from the base-model defaults. The CLI keeps the resolved model defaults unless you pass `--steps` and `--guidance` explicitly; it does not try to parse adapter README files into presets.
 - `ZImageCLI control` exposes control, inpainting, and `--log-control-memory`, but it does not currently expose the control-pipeline LoRA and prompt-enhancement hooks that exist in the library request type.
 - First-time downloads are large, and high-resolution runs can still be memory-heavy on unified-memory systems.
 - The CLI target is macOS-only. The package also declares an iOS library target, but there is no first-party sample app in this repo.

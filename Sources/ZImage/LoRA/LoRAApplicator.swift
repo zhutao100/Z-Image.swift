@@ -280,6 +280,9 @@ public struct LoRAApplicator {
     var layerUpdates: [String: MLXArray] = [:]
     var appliedCount = 0
     var quantizedCount = 0
+    var ignoredRawAlphaCount = 0
+    var minIgnoredRawAlpha = Float.greatestFiniteMagnitude
+    var maxIgnoredRawAlpha = -Float.greatestFiniteMagnitude
 
     func kron2D(_ a: MLXArray, _ b: MLXArray) -> MLXArray {
       let a0 = a.dim(0)
@@ -304,8 +307,15 @@ public struct LoRAApplicator {
         continue
       }
 
-      let alphaScale = lokr.alpha ?? 1.0
-      let effectiveScale = signedScale * alphaScale
+      if let rawAlpha = lokr.alpha, rawAlpha.isFinite {
+        ignoredRawAlphaCount += 1
+        minIgnoredRawAlpha = min(minIgnoredRawAlpha, rawAlpha)
+        maxIgnoredRawAlpha = max(maxIgnoredRawAlpha, rawAlpha)
+      }
+
+      // The currently supported LoKr format stores full w1/w2 factors. In LyCORIS and ai-toolkit,
+      // the per-layer alpha is only applied for low-rank factorized variants, so it must be ignored here.
+      let effectiveScale = signedScale
 
       if let qlin = module as? QuantizedLinear {
         let dequantizedWeight = MLX.dequantized(
@@ -365,10 +375,26 @@ public struct LoRAApplicator {
     }
 
     if appliedCount > 0 {
-      if quantizedCount > 0 {
-        logger?.info("LoKr applied to \(appliedCount) layers (\(quantizedCount) quantized)")
+      let action = signedScale >= 0 ? "applied" : "removed"
+      let ignoredAlphaSummary: String
+      if ignoredRawAlphaCount > 0 {
+        let rangeSummary =
+          if minIgnoredRawAlpha == maxIgnoredRawAlpha {
+            String(format: "%.6g", minIgnoredRawAlpha)
+          } else {
+            "[\(String(format: "%.6g", minIgnoredRawAlpha)), \(String(format: "%.6g", maxIgnoredRawAlpha))]"
+          }
+        ignoredAlphaSummary =
+          "; ignored raw alpha for \(ignoredRawAlphaCount) full-matrix layers (raw_alpha=\(rangeSummary))"
       } else {
-        logger?.info("LoKr applied to \(appliedCount) layers")
+        ignoredAlphaSummary = ""
+      }
+
+      if quantizedCount > 0 {
+        logger?.info(
+          "LoKr \(action) to \(appliedCount) layers (\(quantizedCount) quantized)\(ignoredAlphaSummary)")
+      } else {
+        logger?.info("LoKr \(action) to \(appliedCount) layers\(ignoredAlphaSummary)")
       }
     }
   }
@@ -381,7 +407,9 @@ public struct LoRAApplicator {
   ) {
     let effectiveScale = scale * loraWeights.effectiveScale
 
-    logger?.info("Applying dynamic LoRA with scale=\(scale), effective_scale=\(effectiveScale)")
+    logger?.info(
+      "Applying adapter with scale=\(scale), lora_effective_scale=\(effectiveScale), lora_layers=\(loraWeights.layerCount), lokr_layers=\(loraWeights.lokrLayerCount)"
+    )
 
     var moduleUpdates: [(String, Module)] = []
     var appliedCount = 0
@@ -479,13 +507,20 @@ public struct LoRAApplicator {
     }
 
     if loraWeights.hasLoKr {
+      if appliedCount == 0 {
+        logger?.info("Dynamic LoRA matched 0 standard LoRA layers; applying LoKr adapters separately")
+      }
       applyLoKr(to: transformer, loraWeights: loraWeights, scale: scale, logger: logger)
     }
 
-    if quantizedCount > 0 {
-      logger?.info("Dynamic LoRA applied to \(appliedCount) layers (\(quantizedCount) quantized)")
-    } else {
-      logger?.info("Dynamic LoRA applied to \(appliedCount) layers")
+    if appliedCount > 0 {
+      if quantizedCount > 0 {
+        logger?.info("Dynamic LoRA applied to \(appliedCount) standard layers (\(quantizedCount) quantized)")
+      } else {
+        logger?.info("Dynamic LoRA applied to \(appliedCount) standard layers")
+      }
+    } else if !loraWeights.hasLoKr {
+      logger?.warning("Dynamic LoRA matched 0 layers")
     }
   }
 

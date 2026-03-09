@@ -148,6 +148,11 @@ enum ZImageCLI {
         return .huggingFace(path, scale: loraScale)
       }
     }
+    if loraConfig != nil, steps == nil || guidance == nil {
+      logger.warning(
+        "Using model defaults with LoRA (steps=\(preset.steps), guidance=\(preset.guidanceScale)). Adapter-specific sampling can differ; set --steps and --guidance explicitly when the adapter card recommends values."
+      )
+    }
 
     let request = ZImageGenerationRequest(
       prompt: prompt,
@@ -213,6 +218,7 @@ enum ZImageCLI {
         --height, -H           Output height (default \(ZImageModelMetadata.recommendedHeight))
         --steps, -s            Inference steps (default: model-aware, 9 for Turbo / 50 for Base)
         --guidance, -g         Guidance scale (default: model-aware, 0.0 for Turbo / 4.0 for Base)
+                              Steps count literal denoising iterations / transformer forwards.
         --cfg-normalization    Clamp CFG output norm to the positive-branch norm
         --cfg-truncation       Disable CFG after normalized timestep exceeds this value (default: 1.0)
         --seed                 Random seed
@@ -703,6 +709,7 @@ enum ZImageCLI {
         --height, -H              Output height (default \(ZImageModelMetadata.recommendedHeight))
         --steps, -s               Inference steps (default: model-aware, 9 for Turbo / 50 for Base)
         --guidance, -g            Guidance scale (default: model-aware, 0.0 for Turbo / 4.0 for Base)
+                                 Steps count literal denoising iterations / transformer forwards.
         --cfg-normalization       Clamp CFG output norm to the positive-branch norm
         --cfg-truncation          Disable CFG after normalized timestep exceeds this value (default: 1.0)
         --seed                    Random seed

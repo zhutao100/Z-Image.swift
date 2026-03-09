@@ -67,6 +67,8 @@ The CLI applies model-aware defaults for the built-in `Tongyi-MAI` model ids:
 - `Tongyi-MAI/Z-Image-Turbo`: `1024x1024`, `9` steps, guidance `0.0`
 - `Tongyi-MAI/Z-Image`: `1024x1024`, `50` steps, guidance `4.0`
 
+`--steps` is the literal denoising-iteration count in this repo. The scheduler keeps one extra terminal sigma internally, so `8` steps means `8` transformer forwards and `9` sigma values. This matches the current built-in diffusers scheduler semantics as well.
+
 Explicit flags still override those values field by field. Example:
 
 ```bash
@@ -77,6 +79,8 @@ Explicit flags still override those values field by field. Example:
 ```
 
 Important nuance: preset lookup is id-based. Local paths and unknown model ids keep the Turbo-compatible preset unless you set the relevant flags explicitly.
+
+LoRA nuance: third-party adapter cards can recommend sampling settings that differ from the base-model defaults. The CLI does not auto-parse adapter README files into presets, so keep `--steps` and `--guidance` explicit when an adapter card calls out values.
 
 ### CFG Parity Controls
 

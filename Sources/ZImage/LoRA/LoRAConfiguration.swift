@@ -68,12 +68,45 @@ public struct LoRAWeights: @unchecked Sendable {
     weights.count
   }
 
+  public var hasStandardLoRA: Bool {
+    !weights.isEmpty
+  }
+
   public var lokrLayerCount: Int {
     lokrWeights.count
   }
 
   public var hasLoKr: Bool {
     !lokrWeights.isEmpty
+  }
+
+  public var rawLoKrAlphaRange: (min: Float, max: Float)? {
+    let values = lokrWeights.values.compactMap(\.alpha).filter(\.isFinite)
+    guard let minValue = values.min(), let maxValue = values.max() else { return nil }
+    return (min: minValue, max: maxValue)
+  }
+
+  public var logSummary: String {
+    var parts = [
+      "lora_layers=\(layerCount)",
+      "lokr_layers=\(lokrLayerCount)",
+    ]
+
+    if hasStandardLoRA {
+      parts.append("lora_rank=\(rank)")
+      parts.append("lora_alpha=\(alpha)")
+    }
+
+    if let range = rawLoKrAlphaRange {
+      if range.min == range.max {
+        parts.append("lokr_alpha_raw=\(String(format: "%.6g", range.min))")
+      } else {
+        parts.append(
+          "lokr_alpha_raw=[\(String(format: "%.6g", range.min)), \(String(format: "%.6g", range.max))]")
+      }
+    }
+
+    return parts.joined(separator: ", ")
   }
 }
 

@@ -9,6 +9,27 @@ public enum PipelineUtilities {
     case emptyEmbeddings
   }
 
+  public enum StabilityError: Error, LocalizedError, Sendable {
+    case nonFiniteTensor(String)
+    case excessiveTensorMagnitude(name: String, maxAbs: Float, threshold: Float)
+    case fullyClippedImage(name: String, min: Float, max: Float)
+
+    public var errorDescription: String? {
+      switch self {
+      case .nonFiniteTensor(let name):
+        return "Non-finite values detected in \(name)."
+      case .excessiveTensorMagnitude(let name, let maxAbs, let threshold):
+        return
+          "Numerical instability detected in \(name): abs max \(maxAbs) exceeded threshold \(threshold)."
+      case .fullyClippedImage(let name, let min, let max):
+        return
+          "Decoded \(name) collapsed fully outside the displayable range before clipping (min=\(min), max=\(max))."
+      }
+    }
+  }
+
+  static let defaultTensorAbsMaxThreshold: Float = 10_000
+
   public static func encodePrompt(
     _ prompt: String,
     tokenizer: QwenTokenizer,
@@ -59,7 +80,7 @@ public enum PipelineUtilities {
     vae: VAEImageDecoding,
     height: Int,
     width: Int
-  ) -> MLXArray {
+  ) throws -> MLXArray {
     let input: MLXArray =
       if latents.dtype == vae.dtype {
         latents
@@ -78,7 +99,46 @@ public enum PipelineUtilities {
     }
 
     image = QwenImageIO.denormalizeFromDecoder(image)
+    try validateDisplayImageRange(image, name: "image")
     return MLX.clip(image, min: 0, max: 1)
+  }
+
+  static func validateTensorStability(
+    _ tensor: MLXArray,
+    name: String,
+    maxAbsThreshold: Float = defaultTensorAbsMaxThreshold
+  ) throws {
+    guard isFinite(tensor).all().item(Bool.self) else {
+      throw StabilityError.nonFiniteTensor(name)
+    }
+
+    let maxAbs = abs(tensor).max().item(Float.self)
+    guard maxAbs.isFinite else {
+      throw StabilityError.nonFiniteTensor(name)
+    }
+    guard maxAbs <= maxAbsThreshold else {
+      throw StabilityError.excessiveTensorMagnitude(
+        name: name,
+        maxAbs: maxAbs,
+        threshold: maxAbsThreshold
+      )
+    }
+  }
+
+  static func validateDisplayImageRange(_ image: MLXArray, name: String) throws {
+    guard isFinite(image).all().item(Bool.self) else {
+      throw StabilityError.nonFiniteTensor(name)
+    }
+
+    let minValue = image.min().item(Float.self)
+    let maxValue = image.max().item(Float.self)
+
+    guard minValue.isFinite, maxValue.isFinite else {
+      throw StabilityError.nonFiniteTensor(name)
+    }
+    if maxValue <= 0 || minValue >= 1 {
+      throw StabilityError.fullyClippedImage(name: name, min: minValue, max: maxValue)
+    }
   }
 
   public static func calculateShift(
