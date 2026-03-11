@@ -168,6 +168,7 @@ The code map for those entry points lives in [docs/ARCHITECTURE.md](docs/ARCHITE
 Common CLI knobs:
 
 - `--model/-m`: text-to-image accepts a Hugging Face repo id, local Diffusers-style directory, or local `.safetensors`; the control path expects a standard snapshot or directory
+- `--width/-W`, `--height/-H`: output size; values must be at least `64` and divisible by `16`
 - `--steps/-s`: literal denoising iterations / transformer forwards
   - the scheduler keeps one extra terminal sigma internally, so `8` steps means `8` transformer calls and `9` sigma values
   - some upstream model cards mix that scheduler detail into the prose around Turbo's "8-step" distillation; this repo treats `steps` as the literal iteration count
@@ -178,6 +179,8 @@ Common CLI knobs:
 - `--force-transformer-override-only`: text-to-image only; skip AIO auto-detection for a local `.safetensors`
 - `--cache-limit`: MLX GPU cache limit in MB
 - `--max-sequence-length`: prompt token limit for text encoding
+
+Validation errors now exit non-zero and print the relevant command usage.
 
 Environment variables:
 

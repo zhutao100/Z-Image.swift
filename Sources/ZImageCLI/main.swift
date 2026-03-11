@@ -25,11 +25,50 @@ private final class Box<T>: @unchecked Sendable {
 }
 
 enum ZImageCLI {
+  private enum UsageTopic {
+    case main
+    case quantize
+    case quantizeControlnet
+    case control
+  }
+
+  private enum Subcommand: String {
+    case quantize
+    case quantizeControlnet = "quantize-controlnet"
+    case control
+  }
+
+  private struct CLIError: LocalizedError {
+    let message: String
+    let usage: UsageTopic?
+
+    var errorDescription: String? { message }
+  }
+
   static let logger: Logger = {
     var logger = Logger(label: "z-image.cli")
     logger.logLevel = .info
     return logger
   }()
+
+  private static let minimumImageDimension = 64
+  private static let requiredImageDimensionMultiple = 16
+
+  static func main() -> Never {
+    do {
+      try run()
+      Darwin.exit(EXIT_SUCCESS)
+    } catch let error as CLIError {
+      logger.error("\(error.message)")
+      if let usage = error.usage {
+        printUsage(for: usage)
+      }
+      Darwin.exit(EXIT_FAILURE)
+    } catch {
+      logger.error("\(describe(error))")
+      Darwin.exit(EXIT_FAILURE)
+    }
+  }
 
   // swiftlint:disable:next cyclomatic_complexity
   static func run() throws {
@@ -61,70 +100,72 @@ enum ZImageCLI {
     var forceTransformerOverrideOnly = false
 
     let args = Array(CommandLine.arguments.dropFirst())
+    if let first = args.first, let subcommand = Subcommand(rawValue: first) {
+      switch subcommand {
+      case .quantize:
+        try runQuantize(args: Array(args.dropFirst()))
+      case .quantizeControlnet:
+        try runQuantizeControlnet(args: Array(args.dropFirst()))
+      case .control:
+        try runControl(args: Array(args.dropFirst()))
+      }
+      return
+    }
+
     var iterator = args.makeIterator()
 
     while let arg = iterator.next() {
       switch arg {
       case "--prompt", "-p":
-        prompt = nextValue(for: arg, iterator: &iterator)
+        prompt = try nextValue(for: arg, iterator: &iterator, usage: .main)
       case "--negative-prompt", "--np":
-        negativePrompt = nextValue(for: arg, iterator: &iterator)
+        negativePrompt = try nextValue(for: arg, iterator: &iterator, usage: .main)
       case "--width", "-W":
-        width = optionalIntValue(for: arg, iterator: &iterator, minimum: 64) ?? width
+        width = try imageDimensionValue(for: arg, iterator: &iterator, usage: .main)
       case "--height", "-H":
-        height = optionalIntValue(for: arg, iterator: &iterator, minimum: 64) ?? height
+        height = try imageDimensionValue(for: arg, iterator: &iterator, usage: .main)
       case "--steps", "-s":
-        steps = optionalIntValue(for: arg, iterator: &iterator, minimum: 1) ?? steps
+        steps = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .main)
       case "--guidance", "-g":
-        guidance = optionalFloatValue(for: arg, iterator: &iterator) ?? guidance
+        guidance = try floatValue(for: arg, iterator: &iterator, minimum: 0, usage: .main)
       case "--cfg-normalization":
         cfgNormalization = true
       case "--cfg-truncation":
-        cfgTruncation = floatValue(for: arg, iterator: &iterator, fallback: cfgTruncation)
+        cfgTruncation = try floatValue(for: arg, iterator: &iterator, minimum: 0, maximum: 1, usage: .main)
       case "--seed":
-        seed = UInt64(nextValue(for: arg, iterator: &iterator))
+        seed = try uint64Value(for: arg, iterator: &iterator, usage: .main)
       case "--output", "-o":
-        outputPath = nextValue(for: arg, iterator: &iterator)
+        outputPath = try nextValue(for: arg, iterator: &iterator, usage: .main)
       case "--model", "-m":
-        model = nextValue(for: arg, iterator: &iterator)
+        model = try nextValue(for: arg, iterator: &iterator, usage: .main)
       case "--weights-variant":
-        weightsVariant = nextValue(for: arg, iterator: &iterator)
+        weightsVariant = try nextValue(for: arg, iterator: &iterator, usage: .main)
       case "--force-transformer-override-only":
         forceTransformerOverrideOnly = true
       case "--cache-limit":
-        cacheLimit = intValue(for: arg, iterator: &iterator, minimum: 1, fallback: 2048)
+        cacheLimit = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .main)
       case "--max-sequence-length":
-        maxSequenceLength = optionalIntValue(for: arg, iterator: &iterator, minimum: 64) ?? maxSequenceLength
+        maxSequenceLength = try intValue(for: arg, iterator: &iterator, minimum: 64, usage: .main)
       case "--lora", "-l":
-        loraPath = nextValue(for: arg, iterator: &iterator)
+        loraPath = try nextValue(for: arg, iterator: &iterator, usage: .main)
       case "--lora-scale":
-        loraScale = floatValue(for: arg, iterator: &iterator, fallback: 1.0)
+        loraScale = try floatValue(for: arg, iterator: &iterator, usage: .main)
       case "--enhance", "-e":
         enhancePrompt = true
       case "--enhance-max-tokens":
-        enhanceMaxTokens = intValue(for: arg, iterator: &iterator, minimum: 64, fallback: 512)
+        enhanceMaxTokens = try intValue(for: arg, iterator: &iterator, minimum: 64, usage: .main)
       case "--no-progress":
         noProgress = true
       case "--help", "-h":
         printUsage()
         return
-      case "quantize":
-        try runQuantize(args: Array(args.dropFirst()))
-        return
-      case "quantize-controlnet":
-        try runQuantizeControlnet(args: Array(args.dropFirst()))
-        return
-      case "control":
-        try runControl(args: Array(args.dropFirst()))
-        return
       default:
-        logger.warning("Unknown argument: \(arg)")
+        throw CLIError(message: "Unknown argument: \(arg)", usage: .main)
       }
     }
 
     guard let prompt else {
-      printUsage()
-      return
+      throw CLIError(message: "Missing required --prompt argument", usage: .main)
     }
 
     let preset = ZImagePreset.resolved(
@@ -176,6 +217,7 @@ enum ZImageCLI {
 
     let pipeline = ZImagePipeline(logger: logger)
     let semaphore = DispatchSemaphore(value: 0)
+    let errorBox = Box<Error?>(nil)
     let useBar = !noProgress && (isatty(STDERR_FILENO) != 0)
     let bar = useBar ? ProgressBar(total: preset.steps) : nil
     Task {
@@ -196,14 +238,16 @@ enum ZImageCLI {
               PlainProgress.shared.report(completed: completed, total: progress.totalSteps)
             }
           })
-        if let bar { bar.finish(forceNewline: true) }
       } catch {
-        logger.error("Generation failed: \(error)")
-        if let bar { bar.finish(forceNewline: true) }
+        errorBox.value = error
       }
+      if let bar { bar.finish(forceNewline: true) }
       semaphore.signal()
     }
     semaphore.wait()
+    if let error = errorBox.value {
+      throw error
+    }
   }
 
   private static func printUsage() {
@@ -216,6 +260,7 @@ enum ZImageCLI {
         --negative-prompt      Negative prompt
         --width, -W            Output width (default \(ZImageModelMetadata.recommendedWidth))
         --height, -H           Output height (default \(ZImageModelMetadata.recommendedHeight))
+                              Width and height must be >= \(minimumImageDimension) and divisible by \(requiredImageDimensionMultiple).
         --steps, -s            Inference steps (default: model-aware, 9 for Turbo / 50 for Base)
         --guidance, -g         Guidance scale (default: model-aware, 0.0 for Turbo / 4.0 for Base)
                               Steps count literal denoising iterations / transformer forwards.
@@ -269,6 +314,19 @@ enum ZImageCLI {
       """)
   }
 
+  private static func printUsage(for usage: UsageTopic) {
+    switch usage {
+    case .main:
+      printUsage()
+    case .quantize:
+      printQuantizeUsage()
+    case .quantizeControlnet:
+      printQuantizeControlnetUsage()
+    case .control:
+      printControlUsage()
+    }
+  }
+
   private static func runQuantize(args: [String]) throws {
     var input: String?
     var output: String?
@@ -280,51 +338,48 @@ enum ZImageCLI {
     while let arg = iterator.next() {
       switch arg {
       case "--input", "-i":
-        input = nextValue(for: arg, iterator: &iterator)
+        input = try nextValue(for: arg, iterator: &iterator, usage: .quantize)
       case "--output", "-o":
-        output = nextValue(for: arg, iterator: &iterator)
+        output = try nextValue(for: arg, iterator: &iterator, usage: .quantize)
       case "--bits":
-        bits = intValue(for: arg, iterator: &iterator, minimum: 1, fallback: bits)
+        bits = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .quantize)
       case "--group-size":
-        groupSize = intValue(for: arg, iterator: &iterator, minimum: 1, fallback: groupSize)
+        groupSize = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .quantize)
       case "--verbose":
         verbose = true
       case "--help", "-h":
         printQuantizeUsage()
         return
       default:
-        logger.warning("Unknown quantize argument: \(arg)")
+        throw CLIError(message: "Unknown quantize argument: \(arg)", usage: .quantize)
       }
     }
 
     guard let inputPath = input else {
-      logger.error("Missing required --input argument")
-      printQuantizeUsage()
-      return
+      throw CLIError(message: "Missing required --input argument", usage: .quantize)
     }
 
     guard let outputPath = output else {
-      logger.error("Missing required --output argument")
-      printQuantizeUsage()
-      return
+      throw CLIError(message: "Missing required --output argument", usage: .quantize)
     }
 
     let inputURL = URL(fileURLWithPath: inputPath)
     let outputURL = URL(fileURLWithPath: outputPath)
+    var isDirectory: ObjCBool = false
 
-    guard FileManager.default.fileExists(atPath: inputURL.path) else {
-      logger.error("Input directory not found: \(inputPath)")
-      return
+    guard FileManager.default.fileExists(atPath: inputURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+      throw CLIError(message: "Input model directory not found: \(inputPath)", usage: .quantize)
     }
 
     guard ZImageQuantizer.supportedBits.contains(bits) else {
-      logger.error("Invalid bits: \(bits). Supported: 4, 8")
-      return
+      throw CLIError(message: "Invalid bits: \(bits). Supported values: 4, 8", usage: .quantize)
     }
 
     guard ZImageQuantizer.supportedGroupSizes.contains(groupSize) else {
-      logger.error("Invalid group size: \(groupSize). Supported: 32, 64, 128")
-      return
+      throw CLIError(
+        message: "Invalid group size: \(groupSize). Supported values: 32, 64, 128",
+        usage: .quantize
+      )
     }
 
     let spec = ZImageQuantizationSpec(groupSize: groupSize, bits: bits, mode: .affine)
@@ -372,35 +427,42 @@ enum ZImageCLI {
     while let arg = iterator.next() {
       switch arg {
       case "--input", "-i":
-        input = nextValue(for: arg, iterator: &iterator)
+        input = try nextValue(for: arg, iterator: &iterator, usage: .quantizeControlnet)
       case "--output", "-o":
-        output = nextValue(for: arg, iterator: &iterator)
+        output = try nextValue(for: arg, iterator: &iterator, usage: .quantizeControlnet)
       case "--file", "-f":
-        specificFile = nextValue(for: arg, iterator: &iterator)
+        specificFile = try nextValue(for: arg, iterator: &iterator, usage: .quantizeControlnet)
       case "--bits":
-        bits = intValue(for: arg, iterator: &iterator, minimum: 4, fallback: 8)
+        bits = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .quantizeControlnet)
       case "--group-size":
-        groupSize = intValue(for: arg, iterator: &iterator, minimum: 32, fallback: 32)
+        groupSize = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .quantizeControlnet)
       case "--verbose":
         verbose = true
       case "--help", "-h":
         printQuantizeControlnetUsage()
         return
       default:
-        logger.warning("Unknown quantize-controlnet argument: \(arg)")
+        throw CLIError(message: "Unknown quantize-controlnet argument: \(arg)", usage: .quantizeControlnet)
       }
     }
 
     guard let inputPath = input else {
-      logger.error("Missing required --input argument")
-      printQuantizeControlnetUsage()
-      return
+      throw CLIError(message: "Missing required --input argument", usage: .quantizeControlnet)
     }
 
     guard let outputPath = output else {
-      logger.error("Missing required --output argument")
-      printQuantizeControlnetUsage()
-      return
+      throw CLIError(message: "Missing required --output argument", usage: .quantizeControlnet)
+    }
+
+    guard ZImageQuantizer.supportedBits.contains(bits) else {
+      throw CLIError(message: "Invalid bits: \(bits). Supported values: 4, 8", usage: .quantizeControlnet)
+    }
+
+    guard ZImageQuantizer.supportedGroupSizes.contains(groupSize) else {
+      throw CLIError(
+        message: "Invalid group size: \(groupSize). Supported values: 32, 64, 128",
+        usage: .quantizeControlnet
+      )
     }
 
     let outputURL = URL(fileURLWithPath: outputPath)
@@ -440,9 +502,10 @@ enum ZImageCLI {
             print("Downloaded to: \(sourceURL.path)")
           }
         } else {
-          logger.error("Input not found: \(inputPath). Provide a local path or HuggingFace model ID.")
-          semaphore.signal()
-          return
+          throw CLIError(
+            message: "Input not found: \(inputPath). Provide a local path or HuggingFace model ID.",
+            usage: .quantizeControlnet
+          )
         }
 
         try ZImageQuantizer.quantizeControlnet(
@@ -456,7 +519,6 @@ enum ZImageCLI {
         print("Done: \(outputURL.path)")
       } catch {
         errorBox.value = error
-        logger.error("Quantization failed: \(error)")
       }
       semaphore.signal()
     }
@@ -520,45 +582,45 @@ enum ZImageCLI {
     while let arg = iterator.next() {
       switch arg {
       case "--prompt", "-p":
-        prompt = nextValue(for: arg, iterator: &iterator)
+        prompt = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--negative-prompt", "--np":
-        negativePrompt = nextValue(for: arg, iterator: &iterator)
+        negativePrompt = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--control-image", "-c":
-        controlImage = nextValue(for: arg, iterator: &iterator)
+        controlImage = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--inpaint-image", "-i":
-        inpaintImage = nextValue(for: arg, iterator: &iterator)
+        inpaintImage = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--mask", "--mask-image":
-        maskImage = nextValue(for: arg, iterator: &iterator)
+        maskImage = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--control-scale", "--cs":
-        controlScale = floatValue(for: arg, iterator: &iterator, fallback: 0.75)
+        controlScale = try floatValue(for: arg, iterator: &iterator, minimum: 0, usage: .control)
       case "--controlnet-weights", "--cw":
-        controlnetWeights = nextValue(for: arg, iterator: &iterator)
+        controlnetWeights = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--control-file", "--cf":
-        controlnetWeightsFile = nextValue(for: arg, iterator: &iterator)
+        controlnetWeightsFile = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--width", "-W":
-        width = optionalIntValue(for: arg, iterator: &iterator, minimum: 64) ?? width
+        width = try imageDimensionValue(for: arg, iterator: &iterator, usage: .control)
       case "--height", "-H":
-        height = optionalIntValue(for: arg, iterator: &iterator, minimum: 64) ?? height
+        height = try imageDimensionValue(for: arg, iterator: &iterator, usage: .control)
       case "--steps", "-s":
-        steps = optionalIntValue(for: arg, iterator: &iterator, minimum: 1) ?? steps
+        steps = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .control)
       case "--guidance", "-g":
-        guidance = optionalFloatValue(for: arg, iterator: &iterator) ?? guidance
+        guidance = try floatValue(for: arg, iterator: &iterator, minimum: 0, usage: .control)
       case "--cfg-normalization":
         cfgNormalization = true
       case "--cfg-truncation":
-        cfgTruncation = floatValue(for: arg, iterator: &iterator, fallback: cfgTruncation)
+        cfgTruncation = try floatValue(for: arg, iterator: &iterator, minimum: 0, maximum: 1, usage: .control)
       case "--seed":
-        seed = UInt64(nextValue(for: arg, iterator: &iterator))
+        seed = try uint64Value(for: arg, iterator: &iterator, usage: .control)
       case "--output", "-o":
-        outputPath = nextValue(for: arg, iterator: &iterator)
+        outputPath = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--model", "-m":
-        model = nextValue(for: arg, iterator: &iterator)
+        model = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--weights-variant":
-        weightsVariant = nextValue(for: arg, iterator: &iterator)
+        weightsVariant = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--cache-limit":
-        cacheLimit = intValue(for: arg, iterator: &iterator, minimum: 1, fallback: 2048)
+        cacheLimit = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .control)
       case "--max-sequence-length":
-        maxSequenceLength = optionalIntValue(for: arg, iterator: &iterator, minimum: 64) ?? maxSequenceLength
+        maxSequenceLength = try intValue(for: arg, iterator: &iterator, minimum: 64, usage: .control)
       case "--log-control-memory":
         logControlMemory = true
       case "--no-progress":
@@ -567,25 +629,22 @@ enum ZImageCLI {
         printControlUsage()
         return
       default:
-        logger.warning("Unknown control argument: \(arg)")
+        throw CLIError(message: "Unknown control argument: \(arg)", usage: .control)
       }
     }
 
     guard let prompt else {
-      logger.error("Missing required --prompt argument")
-      printControlUsage()
-      return
+      throw CLIError(message: "Missing required --prompt argument", usage: .control)
     }
     if controlImage == nil, inpaintImage == nil, maskImage == nil {
-      logger.error("At least one of --control-image, --inpaint-image, or --mask must be provided")
-      printControlUsage()
-      return
+      throw CLIError(
+        message: "At least one of --control-image, --inpaint-image, or --mask must be provided",
+        usage: .control
+      )
     }
 
     guard let controlnetWeights else {
-      logger.error("Missing required --controlnet-weights argument")
-      printControlUsage()
-      return
+      throw CLIError(message: "Missing required --controlnet-weights argument", usage: .control)
     }
 
     let preset = ZImagePreset.resolved(
@@ -602,24 +661,21 @@ enum ZImageCLI {
     if let controlImage {
       controlImageURL = URL(fileURLWithPath: controlImage)
       guard FileManager.default.fileExists(atPath: controlImageURL!.path) else {
-        logger.error("Control image not found: \(controlImage)")
-        return
+        throw CLIError(message: "Control image not found: \(controlImage)", usage: .control)
       }
     }
     var inpaintImageURL: URL? = nil
     if let inpaintImage {
       inpaintImageURL = URL(fileURLWithPath: inpaintImage)
       guard FileManager.default.fileExists(atPath: inpaintImageURL!.path) else {
-        logger.error("Inpaint image not found: \(inpaintImage)")
-        return
+        throw CLIError(message: "Inpaint image not found: \(inpaintImage)", usage: .control)
       }
     }
     var maskImageURL: URL? = nil
     if let maskImage {
       maskImageURL = URL(fileURLWithPath: maskImage)
       guard FileManager.default.fileExists(atPath: maskImageURL!.path) else {
-        logger.error("Mask image not found: \(maskImage)")
-        return
+        throw CLIError(message: "Mask image not found: \(maskImage)", usage: .control)
       }
     }
 
@@ -676,19 +732,22 @@ enum ZImageCLI {
 
     let pipeline = ZImageControlPipeline(logger: logger)
     let semaphore = DispatchSemaphore(value: 0)
+    let errorBox = Box<Error?>(nil)
     let finalOutputPath = outputPath
     Task {
       do {
         _ = try await pipeline.generate(request)
-        if let bar = barBox.value { bar.finish(forceNewline: true) }
         logger.info("Output saved to: \(finalOutputPath)")
       } catch {
-        logger.error("Control generation failed: \(error)")
-        if let bar = barBox.value { bar.finish(forceNewline: true) }
+        errorBox.value = error
       }
+      if let bar = barBox.value { bar.finish(forceNewline: true) }
       semaphore.signal()
     }
     semaphore.wait()
+    if let error = errorBox.value {
+      throw error
+    }
   }
 
   private static func printControlUsage() {
@@ -707,6 +766,7 @@ enum ZImageCLI {
         --control-file, --cf      Specific safetensors filename within repo (e.g., "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors")
         --width, -W               Output width (default \(ZImageModelMetadata.recommendedWidth))
         --height, -H              Output height (default \(ZImageModelMetadata.recommendedHeight))
+                                 Width and height must be >= \(minimumImageDimension) and divisible by \(requiredImageDimensionMultiple).
         --steps, -s               Inference steps (default: model-aware, 9 for Turbo / 50 for Base)
         --guidance, -g            Guidance scale (default: model-aware, 0.0 for Turbo / 4.0 for Base)
                                  Steps count literal denoising iterations / transformer forwards.
@@ -755,36 +815,93 @@ enum ZImageCLI {
       """)
   }
 
-  private static func nextValue(for arg: String, iterator: inout IndexingIterator<[String]>) -> String {
-    guard let value = iterator.next() else {
-      fatalError("Expected value after \(arg)")
+  private static func nextValue(
+    for arg: String,
+    iterator: inout IndexingIterator<[String]>,
+    usage: UsageTopic
+  ) throws -> String {
+    guard let value = iterator.next(), !value.hasPrefix("-") else {
+      throw CLIError(message: "Missing value for \(arg)", usage: usage)
     }
     return value
   }
 
-  private static func intValue(for arg: String, iterator: inout IndexingIterator<[String]>, minimum: Int, fallback: Int)
-    -> Int
-  {
-    guard let value = Int(nextValue(for: arg, iterator: &iterator)) else { return fallback }
-    return max(minimum, value)
-  }
-
-  private static func optionalIntValue(
+  private static func intValue(
     for arg: String,
     iterator: inout IndexingIterator<[String]>,
-    minimum: Int
-  ) -> Int? {
-    guard let value = Int(nextValue(for: arg, iterator: &iterator)) else { return nil }
-    return max(minimum, value)
+    minimum: Int,
+    usage: UsageTopic
+  ) throws -> Int {
+    let rawValue = try nextValue(for: arg, iterator: &iterator, usage: usage)
+    guard let value = Int(rawValue), value >= minimum else {
+      throw CLIError(message: "Invalid value for \(arg): '\(rawValue)'. Expected an integer >= \(minimum).", usage: usage)
+    }
+    return value
   }
 
-  private static func floatValue(for arg: String, iterator: inout IndexingIterator<[String]>, fallback: Float) -> Float
-  {
-    Float(nextValue(for: arg, iterator: &iterator)) ?? fallback
+  private static func imageDimensionValue(
+    for arg: String,
+    iterator: inout IndexingIterator<[String]>,
+    usage: UsageTopic
+  ) throws -> Int {
+    let value = try intValue(
+      for: arg,
+      iterator: &iterator,
+      minimum: minimumImageDimension,
+      usage: usage
+    )
+    guard value % requiredImageDimensionMultiple == 0 else {
+      throw CLIError(
+        message:
+          "Invalid value for \(arg): '\(value)'. Expected a multiple of \(requiredImageDimensionMultiple).",
+        usage: usage
+      )
+    }
+    return value
   }
 
-  private static func optionalFloatValue(for arg: String, iterator: inout IndexingIterator<[String]>) -> Float? {
-    Float(nextValue(for: arg, iterator: &iterator))
+  private static func floatValue(
+    for arg: String,
+    iterator: inout IndexingIterator<[String]>,
+    minimum: Float? = nil,
+    maximum: Float? = nil,
+    usage: UsageTopic
+  ) throws -> Float {
+    let rawValue = try nextValue(for: arg, iterator: &iterator, usage: usage)
+    guard let value = Float(rawValue) else {
+      throw CLIError(message: "Invalid value for \(arg): '\(rawValue)'. Expected a number.", usage: usage)
+    }
+    if let minimum, value < minimum {
+      throw CLIError(message: "Invalid value for \(arg): '\(rawValue)'. Expected a number >= \(minimum).", usage: usage)
+    }
+    if let maximum, value > maximum {
+      throw CLIError(message: "Invalid value for \(arg): '\(rawValue)'. Expected a number <= \(maximum).", usage: usage)
+    }
+    return value
+  }
+
+  private static func uint64Value(
+    for arg: String,
+    iterator: inout IndexingIterator<[String]>,
+    usage: UsageTopic
+  ) throws -> UInt64 {
+    let rawValue = try nextValue(for: arg, iterator: &iterator, usage: usage)
+    guard let value = UInt64(rawValue) else {
+      throw CLIError(
+        message: "Invalid value for \(arg): '\(rawValue)'. Expected an unsigned integer seed.",
+        usage: usage
+      )
+    }
+    return value
+  }
+
+  private static func describe(_ error: Error) -> String {
+    if let localizedError = error as? LocalizedError,
+      let message = localizedError.errorDescription
+    {
+      return message
+    }
+    return String(describing: error)
   }
 }
 
@@ -890,4 +1007,4 @@ private final class ProgressBar {
   }
 }
 
-try ZImageCLI.run()
+ZImageCLI.main()

@@ -45,7 +45,7 @@ Useful flags:
 
 - `--prompt/-p`: required prompt
 - `--negative-prompt/--np`: optional negative prompt
-- `--width/-W`, `--height/-H`: output size
+- `--width/-W`, `--height/-H`: output size, must be at least `64` and divisible by `16`
 - `--steps/-s`, `--guidance/-g`: denoising and CFG settings
 - `--cfg-normalization`: clamp CFG output norm back to the positive-branch norm
 - `--cfg-truncation`: disable CFG after the normalized timestep passes the given value
@@ -59,6 +59,8 @@ Useful flags:
 - `--lora/-l`, `--lora-scale`: text-to-image LoRA support
 - `--enhance/-e`, `--enhance-max-tokens`: prompt enhancement through the Qwen text encoder
 - `--no-progress`: disable progress output
+
+Invalid CLI invocations exit non-zero. Missing required flags, missing option values, unknown flags, and invalid numeric values also print the matching command usage.
 
 ### Important Default Behavior
 
@@ -154,6 +156,7 @@ Important `control` flags:
 - `--control-file/--cf`: optional file selector within a repo or directory
 - `--control-scale/--cs`: control-context scale, default `0.75`
 - `--width/-W`, `--height/-H`, `--steps/-s`, `--guidance/-g`
+  Width and height must be at least `64` and divisible by `16`.
 - `--cfg-normalization`, `--cfg-truncation`
 - `--weights-variant`, `--cache-limit`, `--max-sequence-length`, `--no-progress`
 - `--log-control-memory`: emit control-path memory markers

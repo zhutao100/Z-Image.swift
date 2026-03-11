@@ -244,9 +244,9 @@ final class CLIEndToEndTests: XCTestCase {
 
     // Should fail or show usage when prompt is missing
     let output = stdout + stderr
-    XCTAssertTrue(
-      exitCode != 0 || output.contains("Usage") || output.contains("prompt"),
-      "Should fail or show usage without prompt")
+    XCTAssertNotEqual(exitCode, 0, "Missing prompt should exit non-zero")
+    XCTAssertTrue(output.contains("Missing required --prompt argument"), "Should describe the missing prompt")
+    XCTAssertTrue(output.contains("Usage"), "Should include usage output")
   }
 
   func testControlNetMissingControlImage() async throws {
@@ -263,9 +263,8 @@ final class CLIEndToEndTests: XCTestCase {
 
     // Should fail when control image is missing
     let output = stdout + stderr
-    XCTAssertTrue(
-      exitCode != 0 || output.contains("control-image") || output.contains("required"),
-      "Should fail without control image")
+    XCTAssertNotEqual(exitCode, 0, "Missing control inputs should exit non-zero")
+    XCTAssertTrue(output.contains("--control-image") || output.contains("--mask"), "Should mention control inputs")
   }
 
   func testControlNetMissingWeights() async throws {
@@ -283,9 +282,45 @@ final class CLIEndToEndTests: XCTestCase {
 
     // Should fail when controlnet weights are missing
     let output = stdout + stderr
-    XCTAssertTrue(
-      exitCode != 0 || output.contains("controlnet-weights") || output.contains("required"),
-      "Should fail without controlnet weights")
+    XCTAssertNotEqual(exitCode, 0, "Missing controlnet weights should exit non-zero")
+    XCTAssertTrue(output.contains("Missing required --controlnet-weights argument"), "Should mention missing weights")
+  }
+
+  func testUnknownArgumentFailsFast() async throws {
+    try skipIfNoCLI()
+
+    let (stdout, stderr, exitCode) = try await runCLI([
+      "--does-not-exist",
+    ])
+
+    let output = stdout + stderr
+    XCTAssertNotEqual(exitCode, 0, "Unknown arguments should exit non-zero")
+    XCTAssertTrue(output.contains("Unknown argument"), "Should mention the unknown argument")
+  }
+
+  func testMissingFlagValueFailsFast() async throws {
+    try skipIfNoCLI()
+
+    let (stdout, stderr, exitCode) = try await runCLI([
+      "--prompt",
+    ])
+
+    let output = stdout + stderr
+    XCTAssertNotEqual(exitCode, 0, "Missing option values should exit non-zero")
+    XCTAssertTrue(output.contains("Missing value for --prompt"), "Should mention the missing value")
+  }
+
+  func testInvalidImageDimensionFailsFast() async throws {
+    try skipIfNoCLI()
+
+    let (stdout, stderr, exitCode) = try await runCLI([
+      "-p", "test",
+      "-W", "513",
+    ])
+
+    let output = stdout + stderr
+    XCTAssertNotEqual(exitCode, 0, "Invalid dimensions should exit non-zero")
+    XCTAssertTrue(output.contains("multiple of 16"), "Should explain the dimension requirement")
   }
 
   // MARK: - Helper Functions
