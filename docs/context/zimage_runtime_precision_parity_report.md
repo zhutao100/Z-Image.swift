@@ -56,25 +56,49 @@ The encode and decode paths still normalize image and latent tensors to the acti
 
 ## Confirmed Remaining Differences
 
-### 1. RoPE construction and application still differ from Diffusers
+### 1. RoPE is no longer a confirmed structural gap on the denoiser/control path
 
-This is the main remaining documented runtime parity gap.
+The current denoiser and ControlNet transformer RoPE path is now structurally aligned with the Diffusers Z-Image reference.
 
-The Swift runtime still constructs and applies rotary embeddings differently from the Diffusers reference path. The implementation difference is real, but the practical output impact still needs intermediate-tensor validation before any runtime change is made.
+The current code matches the reference on the points that matter most for behavioral parity:
 
-### 2. `weightsVariant` is file selection, not a full runtime precision policy
+- axis-wise frequency construction in `ZImageRopeEmbedder`
+- position-id gathering and concatenation across axes
+- unified `[image, caption]` sequence ordering in the transformer cache path
+- complex-equivalent rotary application in `ZImageAttentionUtils.applyRotary(...)`
+
+That means the older repo wording that Swift still constructs and applies rotary embeddings differently from Diffusers is now too broad for the denoiser/control path.
+
+### 2. The remaining RoPE question is numeric staging, not algorithm shape
+
+The still-open parity question is narrower:
+
+- Diffusers builds the RoPE angle/frequency path through a float64-backed precompute before storing float/complex tensors
+- Diffusers explicitly normalizes Q/K to float32 inside the rotary application path before casting back
+- the current Swift implementation builds RoPE tables directly in float32 and applies the rotation through MLX array ops without an explicit float32 cast inside `applyRotary(...)`
+
+That is a plausible source of small intermediate-tensor drift, but it is not evidence of a still-open structural mismatch.
+
+### 3. `weightsVariant` is file selection, not a full runtime precision policy
 
 `weightsVariant` chooses which component files are loaded from a snapshot. It is useful for selecting `fp16` or `bf16` shards, but it is not a global runtime compute-dtype switch by itself.
 
 ## Practical Reading Of The Current State
 
-The repo has already closed the three most actionable parity gaps from the earlier March 2026 pass:
+The repo has already closed the earlier broad parity concerns that were actionable from the March 2026 pass:
 
 - denoiser ingress dtype normalization
 - timestep-MLP ingress dtype normalization
 - boolean prompt masking
+- denoiser/control-path RoPE structural parity with Diffusers
 
-That means parity work should no longer focus on those items unless a regression reopens them. The next meaningful parity step is a RoPE probe that compares intermediate tensors against the local Diffusers checkout before changing runtime behavior.
+That means parity work should no longer describe RoPE as a confirmed algorithm mismatch unless a regression reopens that finding. The next meaningful parity step is a focused intermediate-tensor RoPE probe that compares numeric staging against the local Diffusers checkout before changing runtime behavior.
+
+## Scope Note
+
+The statement above is intentionally scoped to the Z-Image denoiser and ControlNet transformer path, which is the part directly comparable to the provided Diffusers reference files.
+
+The repo also contains separate RoPE usage inside the Swift text-encoder stack, but that path is not implemented inside the provided Diffusers Z-Image transformer/controlnet files and should not be cited as evidence of a remaining denoiser/control RoPE parity gap.
 
 ## References
 

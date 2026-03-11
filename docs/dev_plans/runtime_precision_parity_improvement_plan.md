@@ -19,10 +19,15 @@ Those behaviors are implemented in:
 
 ## Remaining Open Work
 
-The remaining documented runtime parity gap is RoPE behavior:
+The remaining documented runtime parity work is now a narrow RoPE numeric-staging audit, not a confirmed algorithm mismatch.
 
-- Swift still constructs and applies rotary embeddings differently from Diffusers
-- changing RoPE without intermediate probes is risky because end-to-end image deltas alone are too noisy to isolate the effect
+The current denoiser and ControlNet transformer RoPE path appears structurally aligned with the Diffusers Z-Image reference, so the open questions are reduced to items such as:
+
+- whether Diffusers float64-backed RoPE precompute leaves a measurable intermediate-tensor signature that Swift float32 table construction does not
+- whether the lack of an explicit float32 cast inside Swift `applyRotary(...)` leaves a measurable Q/K delta versus the Diffusers path
+- whether any such deltas are large enough to justify a runtime change after probe validation
+
+Changing RoPE behavior without intermediate probes is still risky because end-to-end image deltas alone are too noisy to isolate the effect.
 
 There is also an important nuance to keep in mind during parity work:
 
@@ -32,7 +37,7 @@ There is also an important nuance to keep in mind during parity work:
 
 Reopen parity implementation work when one of these is true:
 
-- a code change touches denoiser numerics, rotary application, or prompt masking
+- a code change touches denoiser numerics, rotary table construction, rotary application, or prompt masking
 - a Swift-vs-Diffusers drift report needs source-backed confirmation
 - a new backend or weight-format change makes the current dtype assumptions questionable
 
@@ -70,4 +75,4 @@ When you need deeper diagnosis, use [../golden_checks.md](../golden_checks.md) a
 
 ## Next Recommended Step
 
-If parity work resumes, the next change should be an intermediate-tensor RoPE probe, not another end-to-end-only tweak. Validate the rotary inputs and outputs against the local Diffusers checkout first, then decide whether the runtime path needs a behavioral change.
+If parity work resumes, the next step should still be an intermediate-tensor RoPE probe, but it should be framed as a numeric drift audit rather than a search for a still-open algorithm mismatch. Validate the RoPE tables plus the pre-RoPE and post-RoPE Q/K tensors against the local Diffusers checkout first, then decide whether the runtime path needs a behavioral change.

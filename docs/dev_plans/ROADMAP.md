@@ -6,7 +6,7 @@ The previous pipeline/CLI/model-loading cleanup items were completed in the Marc
 ## Near Term
 
 1. **Finish the next precision-parity pass**
-   - The remaining documented runtime gap is RoPE parity and the intermediate-tensor probes needed to validate it safely.
+   - The remaining documented runtime work is a RoPE numeric-staging audit and the intermediate-tensor probes needed to validate it safely.
 2. **Expose more of the library-only control features in the CLI**
    - Control-path LoRA and prompt enhancement exist in the library request type but are not surfaced in `ZImageCLI control`.
 3. **Add a first-party app example**
