@@ -23,16 +23,26 @@ enum ZImageAttentionUtils {
     _ freqsCos: MLXArray,
     _ freqsSin: MLXArray
   ) -> MLXArray {
-    let shape = x.shape
+    let originalDType = x.dtype
+    let computeInput = x.asType(.float32)
+    let cosInput = freqsCos.dtype == .float32 ? freqsCos : freqsCos.asType(.float32)
+    let sinInput = freqsSin.dtype == .float32 ? freqsSin : freqsSin.asType(.float32)
+    let shape = computeInput.shape
     let newShape = Array(shape.dropLast()) + [shape.last! / 2, 2]
-    let xReshaped = x.reshaped(newShape)
+    let xReshaped = computeInput.reshaped(newShape)
 
     let xReal = xReshaped[0..., 0..., 0..., 0..., 0]
     let xImag = xReshaped[0..., 0..., 0..., 0..., 1]
 
-    let outReal = xReal * freqsCos - xImag * freqsSin
-    let outImag = xReal * freqsSin + xImag * freqsCos
+    let outReal = xReal * cosInput - xImag * sinInput
+    let outImag = xReal * sinInput + xImag * cosInput
 
-    return MLX.stacked([outReal, outImag], axis: -1).reshaped(shape)
+    let rotated = MLX.stacked([outReal, outImag], axis: -1).reshaped(shape)
+    switch originalDType {
+    case .float16, .bfloat16, .float32, .float64:
+      return rotated.asType(originalDType)
+    default:
+      return rotated
+    }
   }
 }
