@@ -41,8 +41,6 @@ This folder is the current reference set for `zimage.swift`. Start with the root
 
 - [dev_plans/controlnet-memory-followup.md](dev_plans/controlnet-memory-followup.md)
   Current control-memory status, retained measurement recipe, and re-entry criteria.
-- [dev_plans/runtime_precision_parity_improvement_plan.md](dev_plans/runtime_precision_parity_improvement_plan.md)
-  Remaining precision-parity follow-up after the landed dtype and mask fixes.
 
 ## Background And Historical Notes
 
@@ -53,6 +51,8 @@ These files can still be useful, but they are not the primary source of truth fo
 - [debug_notes/controlnet-memory-analysis.md](debug_notes/controlnet-memory-analysis.md)
 - [context/mlx_pytorch_bf16_inference_dtype_deep_dive.md](context/mlx_pytorch_bf16_inference_dtype_deep_dive.md)
 - [context/precision_formats_on_apple_silicon.md](context/precision_formats_on_apple_silicon.md)
+- [archive/dev_plans/runtime_precision_parity_improvement_plan.md](archive/dev_plans/runtime_precision_parity_improvement_plan.md)
+  Completed RoPE numeric-staging follow-up, archived after the March 11, 2026 parity pass.
 
 ## Archive
 

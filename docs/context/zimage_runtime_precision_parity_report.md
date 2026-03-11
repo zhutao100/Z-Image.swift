@@ -2,9 +2,9 @@
 
 This note summarizes the current source-backed precision-parity state of the Swift + MLX implementation against the directly relevant Diffusers Z-Image pipelines.
 
-Status: refreshed against the current repo state on March 11, 2026.
+Status: refreshed against the current repo state on March 11, 2026, including the completed RoPE numeric-staging audit.
 
-For probe design and fixture methodology, use [../golden_checks.md](../golden_checks.md). For the currently open follow-up work, use [../dev_plans/runtime_precision_parity_improvement_plan.md](../dev_plans/runtime_precision_parity_improvement_plan.md).
+For probe design and fixture methodology, use [../golden_checks.md](../golden_checks.md). The previous follow-up plan is now archived at [../archive/dev_plans/runtime_precision_parity_improvement_plan.md](../archive/dev_plans/runtime_precision_parity_improvement_plan.md).
 
 ## Scope
 
@@ -21,6 +21,12 @@ Swift files that matter most for the current parity story:
 - `Sources/ZImage/Model/VAE/AutoencoderKL.swift`
 - `Sources/ZImage/Model/VAE/AutoencoderDecoder.swift`
 - `Sources/ZImage/Weights/ZImageWeightsMapper.swift`
+
+Current regression coverage for the denoiser/control parity path lives in:
+
+- `Tests/ZImageTests/Support/PipelinePrecisionTests.swift`
+- `Tests/ZImageTests/Support/QwenEncoderAttentionMaskTests.swift`
+- `Tests/ZImageTests/Transformer/ZImageRoPEParityTests.swift`
 
 Diffusers reference targets:
 
@@ -54,45 +60,37 @@ The prompt-encoding attention mask is no longer an additive hidden-dtype mask on
 
 The encode and decode paths still normalize image and latent tensors to the active VAE dtype at the relevant boundaries, which keeps the Swift path aligned with the typical Diffusers VAE handling.
 
-## Confirmed Remaining Differences
+### 6. RoPE table construction and rotary dtype staging are now source-backed on the denoiser/control path
 
-### 1. RoPE is no longer a confirmed structural gap on the denoiser/control path
+The earlier RoPE follow-up is now closed.
 
-The current denoiser and ControlNet transformer RoPE path is now structurally aligned with the Diffusers Z-Image reference.
+`Tests/ZImageTests/Transformer/ZImageRoPEParityTests.swift` validates the denoiser/control RoPE path against Diffusers-style reference math for:
 
-The current code matches the reference on the points that matter most for behavioral parity:
+- representative `ZImageRopeEmbedder` outputs
+- rotary application on `float32` inputs
+- rotary application on `bfloat16` inputs with float32 compute and cast-back to the original dtype
 
-- axis-wise frequency construction in `ZImageRopeEmbedder`
-- position-id gathering and concatenation across axes
-- unified `[image, caption]` sequence ordering in the transformer cache path
-- complex-equivalent rotary application in `ZImageAttentionUtils.applyRotary(...)`
+That audit surfaced one concrete runtime gap in the pre-audit code: `ZImageAttentionUtils.applyRotary(...)` was returning `float32` tensors for `bfloat16` query/key inputs. The helper now mirrors Diffusers more closely by computing the rotation in `float32` and casting the rotated tensors back to the original query/key dtype.
 
-That means the older repo wording that Swift still constructs and applies rotary embeddings differently from Diffusers is now too broad for the denoiser/control path.
+The table-construction side did not require a separate runtime change. The existing `ZImageRopeEmbedder` output already matched the Diffusers-style float64-backed, float32-materialized reference within tight tolerance in the new unit coverage.
 
-### 2. The remaining RoPE question is numeric staging, not algorithm shape
+## Important Precision Nuances
 
-The still-open parity question is narrower:
-
-- Diffusers builds the RoPE angle/frequency path through a float64-backed precompute before storing float/complex tensors
-- Diffusers explicitly normalizes Q/K to float32 inside the rotary application path before casting back
-- the current Swift implementation builds RoPE tables directly in float32 and applies the rotation through MLX array ops without an explicit float32 cast inside `applyRotary(...)`
-
-That is a plausible source of small intermediate-tensor drift, but it is not evidence of a still-open structural mismatch.
-
-### 3. `weightsVariant` is file selection, not a full runtime precision policy
+### 1. `weightsVariant` is file selection, not a full runtime precision policy
 
 `weightsVariant` chooses which component files are loaded from a snapshot. It is useful for selecting `fp16` or `bf16` shards, but it is not a global runtime compute-dtype switch by itself.
 
 ## Practical Reading Of The Current State
 
-The repo has already closed the earlier broad parity concerns that were actionable from the March 2026 pass:
+The repo has now closed the earlier broad parity concerns from the March 2026 pass plus the later RoPE numeric-staging follow-up:
 
 - denoiser ingress dtype normalization
 - timestep-MLP ingress dtype normalization
 - boolean prompt masking
 - denoiser/control-path RoPE structural parity with Diffusers
+- denoiser/control-path RoPE float32 compute plus cast-back parity on BF16 inputs
 
-That means parity work should no longer describe RoPE as a confirmed algorithm mismatch unless a regression reopens that finding. The next meaningful parity step is a focused intermediate-tensor RoPE probe that compares numeric staging against the local Diffusers checkout before changing runtime behavior.
+That means there is no currently open denoiser/control precision-parity implementation item in the repo docs. Reopen parity work only when a regression report, backend change, or new weight format creates new source-backed evidence that the current assumptions no longer hold.
 
 ## Scope Note
 
