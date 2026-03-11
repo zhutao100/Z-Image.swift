@@ -111,7 +111,7 @@ Text-to-image LoRA usage:
   -o lion.png
 ```
 
-`--lora` accepts a local path or a Hugging Face repo id.
+`--lora` accepts a local path or a Hugging Face repo id. The same `--lora` and `--lora-scale` flags are also available on `ZImageCLI control`.
 
 ## Prompt Enhancement
 
@@ -119,7 +119,7 @@ Text-to-image LoRA usage:
 ./ZImageCLI -p "cat with a hat" --enhance --enhance-max-tokens 512 -o cat.png
 ```
 
-This re-prompts through the Qwen text encoder's generation path before normal encoding. It increases memory use and is currently exposed on the text-to-image CLI only.
+This re-prompts through the Qwen text encoder's generation path before normal encoding. It increases memory use, and the same `--enhance` and `--enhance-max-tokens` flags are available on both generation commands.
 
 ## ControlNet And Inpainting
 
@@ -146,6 +146,23 @@ Inpainting example:
   --output inpaint.png
 ```
 
+ControlNet with LoRA and prompt enhancement:
+
+```bash
+./ZImageCLI control \
+  --prompt "a minimalist modern hallway interior" \
+  --control-image /path/to/depth.jpg \
+  --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
+  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
+  --lora F16/z-image-turbo-flow-dpo \
+  --lora-scale 1.0 \
+  --enhance \
+  --enhance-max-tokens 512 \
+  --steps 9 \
+  --guidance 1.0 \
+  --output control-lora.png
+```
+
 Important `control` flags:
 
 - `--prompt/-p`: required
@@ -158,6 +175,8 @@ Important `control` flags:
 - `--width/-W`, `--height/-H`, `--steps/-s`, `--guidance/-g`
   Width and height must be at least `64` and divisible by `16`.
 - `--cfg-normalization`, `--cfg-truncation`
+- `--lora/-l`, `--lora-scale`: optional control-path LoRA adapter, same local-path or Hugging Face semantics as text-to-image
+- `--enhance/-e`, `--enhance-max-tokens`: optional prompt enhancement before text encoding; increases memory use
 - `--weights-variant`, `--cache-limit`, `--max-sequence-length`, `--no-progress`
 - `--log-control-memory`: emit control-path memory markers
 
@@ -169,7 +188,6 @@ Current control-path nuances:
 
 - `--model` on the control command resolves a standard model snapshot or local directory. The control pipeline does not expose the text-to-image AIO / transformer-only `.safetensors` override path.
 - `--weights-variant` applies to the base model snapshot, not the ControlNet weights source.
-- `ZImageCLI control` does not expose the control-pipeline LoRA or prompt-enhancement fields that exist in the library request type.
 
 ## Quantization
 

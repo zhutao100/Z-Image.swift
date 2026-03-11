@@ -15,8 +15,8 @@ The practical goal is to run Z-Image locally without a Python runtime while stil
 
 - Text-to-image generation with the Z-Image diffusion transformer and Flow Match scheduler
 - ControlNet conditioning and inpainting via `ZImageCLI control`
-- LoRA and LoKr adapters on the text-to-image pipeline and CLI
-- Optional prompt enhancement on the text-to-image path through the Qwen text encoder generation flow
+- LoRA and LoKr adapters on both generation pipelines and CLI paths
+- Optional prompt enhancement on both generation pipelines and CLI paths through the Qwen text encoder generation flow
 - 4-bit and 8-bit quantization for base-model and ControlNet directories
 - Hugging Face cache reuse, local Diffusers-style directories, and text-to-image AIO / transformer-only `.safetensors`
 
@@ -144,6 +144,8 @@ ControlNet:
   --output control.png
 ```
 
+`ZImageCLI control` also accepts `--lora`, `--lora-scale`, `--enhance`, and `--enhance-max-tokens`.
+
 Quantize a local base-model directory:
 
 ```bash
@@ -193,7 +195,6 @@ The detailed behavior for cache lookup, local-path handling, AIO checkpoints, qu
 ## Current Limitations
 
 - Model-aware defaults cover known ids, inspectable local or cached snapshots, and common Z-Image-style aliases. Completely unrecognized models still need explicit `--steps` and `--guidance` if you do not want the Turbo-compatible preset.
-- `ZImageCLI control` does not expose the control-pipeline LoRA or prompt-enhancement fields that exist in `ZImageControlGenerationRequest`.
 - Text-to-image supports local AIO / transformer-only `.safetensors`; the control path currently expects a standard model snapshot or local directory instead.
 - Third-party LoRA cards can recommend different sampling settings. The CLI does not parse adapter metadata into presets.
 - First-time downloads are large, and higher-resolution runs still stress unified memory.

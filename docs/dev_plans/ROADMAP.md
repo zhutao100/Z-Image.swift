@@ -5,17 +5,15 @@ The previous pipeline/CLI/model-loading cleanup items were completed in the Marc
 
 ## Near Term
 
-1. **Expose more of the library-only control features in the CLI**
-   - Control-path LoRA and prompt enhancement exist in the library request type but are not surfaced in `ZImageCLI control`.
-2. **Add a first-party app example**
+1. **Add a first-party app example**
    - The package declares an iOS library target, but the repo still has no maintained sample app.
-3. **Consider batch or multi-image generation**
+2. **Consider batch or multi-image generation**
 
 ## Follow-On Work
 
-4. **Re-evaluate the CLI parsing approach after the next user-facing feature pass**
+3. **Re-evaluate the CLI parsing approach after the next user-facing feature pass**
    - The current manual parser is much stricter now, so replacing it is no longer blocking on basic ergonomics.
-5. **Expand preset detection only if more upstream model families make the current heuristics insufficient**
+4. **Expand preset detection only if more upstream model families make the current heuristics insufficient**
    - Known ids, local snapshot metadata, cached metadata, and common Z-Image aliases now cover the current practical cases.
 
 ## Ongoing Maintenance

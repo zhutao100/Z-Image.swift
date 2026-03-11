@@ -182,18 +182,8 @@ enum ZImageCLI {
       Memory.cacheLimit = limit * 1024 * 1024
       logger.info("GPU cache limit set to \(limit)MB")
     }
-    let loraConfig: LoRAConfiguration? = loraPath.map { path in
-      if path.hasPrefix("/") || path.hasPrefix("./") || path.hasPrefix("~") {
-        return .local(path, scale: loraScale)
-      } else {
-        return .huggingFace(path, scale: loraScale)
-      }
-    }
-    if loraConfig != nil, steps == nil || guidance == nil {
-      logger.warning(
-        "Using model defaults with LoRA (steps=\(preset.steps), guidance=\(preset.guidanceScale)). Adapter-specific sampling can differ; set --steps and --guidance explicitly when the adapter card recommends values."
-      )
-    }
+    let loraConfig = makeLoRAConfiguration(path: loraPath, scale: loraScale)
+    warnIfLoRAUsesModelDefaults(loraConfig: loraConfig, steps: steps, guidance: guidance, preset: preset)
 
     let request = ZImageGenerationRequest(
       prompt: prompt,
@@ -575,6 +565,10 @@ enum ZImageCLI {
     var weightsVariant: String?
     var cacheLimit: Int?
     var maxSequenceLength: Int?
+    var loraPath: String?
+    var loraScale: Float = 1.0
+    var enhancePrompt = false
+    var enhanceMaxTokens = 512
     var noProgress = false
     var logControlMemory = false
 
@@ -621,6 +615,14 @@ enum ZImageCLI {
         cacheLimit = try intValue(for: arg, iterator: &iterator, minimum: 1, usage: .control)
       case "--max-sequence-length":
         maxSequenceLength = try intValue(for: arg, iterator: &iterator, minimum: 64, usage: .control)
+      case "--lora", "-l":
+        loraPath = try nextValue(for: arg, iterator: &iterator, usage: .control)
+      case "--lora-scale":
+        loraScale = try floatValue(for: arg, iterator: &iterator, usage: .control)
+      case "--enhance", "-e":
+        enhancePrompt = true
+      case "--enhance-max-tokens":
+        enhanceMaxTokens = try intValue(for: arg, iterator: &iterator, minimum: 64, usage: .control)
       case "--log-control-memory":
         logControlMemory = true
       case "--no-progress":
@@ -683,6 +685,8 @@ enum ZImageCLI {
       Memory.cacheLimit = limit * 1024 * 1024
       logger.info("GPU cache limit set to \(limit)MB")
     }
+    let loraConfig = makeLoRAConfiguration(path: loraPath, scale: loraScale)
+    warnIfLoRAUsesModelDefaults(loraConfig: loraConfig, steps: steps, guidance: guidance, preset: preset)
 
     let useBar = !noProgress && (isatty(STDERR_FILENO) != 0)
     let bar = useBar ? ProgressBar(total: preset.steps) : nil
@@ -726,7 +730,10 @@ enum ZImageCLI {
       controlnetWeights: controlnetWeights,
       controlnetWeightsFile: controlnetWeightsFile,
       maxSequenceLength: preset.maxSequenceLength,
+      lora: loraConfig,
       progressCallback: progressCallback,
+      enhancePrompt: enhancePrompt,
+      enhanceMaxTokens: enhanceMaxTokens,
       runtimeOptions: .init(logPhaseMemory: logControlMemory)
     )
 
@@ -778,6 +785,10 @@ enum ZImageCLI {
         --weights-variant         Weights precision variant (e.g. fp16, bf16)
         --cache-limit             GPU memory cache limit in MB (default: unlimited)
         --max-sequence-length     Maximum sequence length for text encoding (default: 512)
+        --lora, -l                LoRA weights path or HuggingFace ID
+        --lora-scale              LoRA scale factor (default: 1.0)
+        --enhance, -e             Enhance prompt using LLM (requires ~5GB extra VRAM)
+        --enhance-max-tokens      Max tokens for prompt enhancement (default: 512)
         --log-control-memory      Emit resident and MLX memory markers for control-path phases
         --no-progress             Disable progress output
         --help, -h                Show help
@@ -812,7 +823,33 @@ enum ZImageCLI {
         # Using local controlnet weights
         ZImageCLI control -p "a forest path" -c depth.jpg --cs 0.7 \\
           --cw ./controlnet-q8 -o forest.png
+
+        # Depth control with a LoRA adapter
+        ZImageCLI control -p "a modern hallway interior" -c depth.jpg \\
+          --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
+          --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \\
+          --lora F16/z-image-turbo-flow-dpo --lora-scale 1.0 -s 9 -g 1.0
       """)
+  }
+
+  private static func makeLoRAConfiguration(path: String?, scale: Float) -> LoRAConfiguration? {
+    guard let path else { return nil }
+    if path.hasPrefix("/") || path.hasPrefix("./") || path.hasPrefix("~") {
+      return .local(path, scale: scale)
+    }
+    return .huggingFace(path, scale: scale)
+  }
+
+  private static func warnIfLoRAUsesModelDefaults(
+    loraConfig: LoRAConfiguration?,
+    steps: Int?,
+    guidance: Float?,
+    preset: ZImagePreset
+  ) {
+    guard loraConfig != nil, steps == nil || guidance == nil else { return }
+    logger.warning(
+      "Using model defaults with LoRA (steps=\(preset.steps), guidance=\(preset.guidanceScale)). Adapter-specific sampling can differ; set --steps and --guidance explicitly when the adapter card recommends values."
+    )
   }
 
   private static func nextValue(

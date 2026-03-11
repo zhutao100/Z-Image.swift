@@ -56,6 +56,19 @@ final class CLIEndToEndTests: XCTestCase {
       "Help output should contain usage information")
   }
 
+  func testControlHelpMentionsLoRAAndEnhanceFlags() async throws {
+    try skipIfNoCLI()
+
+    let (stdout, stderr, exitCode) = try await runCLI(["control", "--help"])
+    let output = stdout + stderr
+
+    XCTAssertEqual(exitCode, 0, "Control help should exit with code 0")
+    XCTAssertTrue(output.contains("--lora"), "Control help should mention LoRA support")
+    XCTAssertTrue(output.contains("--lora-scale"), "Control help should mention LoRA scale")
+    XCTAssertTrue(output.contains("--enhance"), "Control help should mention prompt enhancement")
+    XCTAssertTrue(output.contains("--enhance-max-tokens"), "Control help should mention enhancement token limit")
+  }
+
   // MARK: - Text-to-Image Generation Tests
 
   func testBasicTextToImageGeneration() async throws {

@@ -57,8 +57,8 @@ Both request types expose CFG truncation and normalization controls in addition 
 
 Current asymmetry to know about:
 
-- the control request type already has LoRA and prompt-enhancement fields
-- `ZImageCLI control` does not expose those flags yet
+- the text-to-image CLI accepts local AIO / transformer-only `.safetensors`
+- the control CLI still expects a standard model snapshot or local directory
 
 ## Model Selection And Snapshot Loading
 
@@ -112,13 +112,15 @@ Source of truth: `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 
 `ZImageControlPipeline.generate(...)` adds:
 
+- optional prompt enhancement through the Qwen generation path before normal prompt encoding
 - control-image encoding
 - optional inpaint-image and mask encoding
 - separate ControlNet weight loading
+- optional LoRA swap before denoising
 - control-context construction before denoising
 - cached prompt embeddings across repeated runs
 
-The CLI requires `--controlnet-weights` plus at least one of `--control-image`, `--inpaint-image`, or `--mask`.
+The CLI requires `--controlnet-weights` plus at least one of `--control-image`, `--inpaint-image`, or `--mask`. It also exposes the same `--lora` and `--enhance` knobs as the text-to-image command.
 
 Source of truth: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
 
