@@ -10,19 +10,20 @@ Fast path:
 ./scripts/build.sh
 ```
 
-Explicit release build:
+Override the derived-data path or configuration when needed:
 
 ```bash
-xcodebuild -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
+DERIVED_DATA_PATH=./dist ./scripts/build.sh
+CONFIGURATION=Debug ./scripts/build.sh
 ```
 
-CI uses a more explicit non-interactive form:
+Equivalent explicit command:
 
 ```bash
 xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath ./dist -skipPackagePluginValidation ENABLE_PLUGIN_PREPAREMLSHADERS=YES CLANG_COVERAGE_MAPPING=NO
 ```
 
-The package depends on the MLX shader-preparation plugin. In local interactive builds, allow the prompt if Xcode asks. In CI or scripted environments, use the same plugin flags as `.github/workflows/ci.yml`.
+`scripts/build.sh` now uses the same non-interactive plugin flags as CI so local scripted builds match the release path more closely.
 
 ### SwiftPM-Only Binary Builds
 
@@ -43,6 +44,8 @@ Default verification path:
 swift test
 ```
 
+The MLX-backed test support now prepares the SwiftPM metallib automatically on demand, and the opt-in E2E suite will build the SwiftPM `ZImageCLI` product automatically when needed.
+
 Heavier test suites are opt-in:
 
 - `ZImageIntegrationTests`: require real model weights
@@ -60,7 +63,7 @@ ZIMAGE_RUN_INTEGRATION_TESTS=1 swift test --filter PerformanceTests
 ZIMAGE_RUN_E2E_TESTS=1 swift test --filter CLIEndToEndTests
 ```
 
-`ZImageE2ETests` now use the `ZImageCLI` executable built by the same SwiftPM stack as `swift test`. They no longer invoke `xcodebuild` internally.
+`ZImageE2ETests` use the `ZImageCLI` executable built by the same SwiftPM stack as `swift test`. They do not invoke `xcodebuild` internally.
 
 ### Opt-In Base Smoke Test
 
@@ -77,17 +80,22 @@ Notes:
 
 - `ZIMAGE_RUN_BASE_SMOKE=1` is required; otherwise the test skips.
 - `ZIMAGE_BASE_SMOKE_MODEL` is optional. When omitted, the test uses `Tongyi-MAI/Z-Image` and resolves it through the normal cache/download path.
-- If you run the test through SwiftPM, keep `mlx.metallib` available via `scripts/build_mlx_metallib.sh` first.
+- The MLX test helpers prepare the SwiftPM metallib automatically when the test first touches MLX-backed execution.
 
 ## CI And Packaging
 
 Current CI behavior:
 
-- trigger: pushes to `main`
+- triggers:
+  - pull requests: run the SwiftPM verification job
+  - pushes to `main`: run verification, then build/package/release the nightly artifact
 - runner: `macos-latest`
 - Xcode: `16.0`
 - artifact: `zimage.macos.arm64.zip`
 - release target: GitHub prerelease tag `nightly`
+- smoke checks:
+  - `swift test`
+  - `ZImageCLI --help` from the packaged release directory after `default.metallib` is copied alongside the binary
 
 Source of truth:
 

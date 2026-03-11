@@ -3,7 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class SafeTensorsReaderTests: XCTestCase {
+final class SafeTensorsReaderTests: MLXTestCase {
 
   // MARK: - Error Type Tests
 

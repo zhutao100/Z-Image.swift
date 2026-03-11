@@ -3,7 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class VAEAttentionTests: XCTestCase {
+final class VAEAttentionTests: MLXTestCase {
   func testChunkedScaledDotProductAttentionMatchesFullAttention() {
     let shape = [1, 1, 17, 8]
     let queries = MLXArray(0 ..< 136, shape).asType(.float32)

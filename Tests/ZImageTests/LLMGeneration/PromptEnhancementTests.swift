@@ -4,7 +4,7 @@ import XCTest
 @testable import ZImage
 
 /// Unit tests for prompt enhancement components
-final class PromptEnhancementTests: XCTestCase {
+final class PromptEnhancementTests: MLXTestCase {
 
   // MARK: - PromptEnhanceConfig Tests
 

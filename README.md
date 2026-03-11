@@ -86,8 +86,18 @@ The shortest path is the repo script:
 Equivalent explicit command:
 
 ```bash
-xcodebuild -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
+xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode -skipPackagePluginValidation ENABLE_PLUGIN_PREPAREMLSHADERS=YES CLANG_COVERAGE_MAPPING=NO
 ```
+
+### Verify
+
+Run the default verification workflow with:
+
+```bash
+swift test
+```
+
+Opt-in integration and E2E suites are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ### Run
 

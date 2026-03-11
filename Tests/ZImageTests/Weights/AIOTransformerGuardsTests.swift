@@ -4,7 +4,7 @@ import XCTest
 
 @testable import ZImage
 
-final class AIOTransformerGuardsTests: XCTestCase {
+final class AIOTransformerGuardsTests: MLXTestCase {
   private func makeConfig(qkNorm: Bool) -> ZImageTransformerConfig {
     ZImageTransformerConfig(
       inChannels: 4,

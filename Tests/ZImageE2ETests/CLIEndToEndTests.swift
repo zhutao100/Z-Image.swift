@@ -331,7 +331,7 @@ final class CLIEndToEndTests: XCTestCase {
 
   private func skipIfNoCLI() throws {
     guard let path = cliPath, !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
-      throw XCTSkip("CLI not built. Run `swift build --product ZImageCLI` first.")
+      throw XCTSkip("CLI executable is unavailable after SwiftPM test preparation.")
     }
   }
 

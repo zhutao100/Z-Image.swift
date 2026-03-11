@@ -5,7 +5,7 @@ import XCTest
 
 @testable import ZImage
 
-final class VAEComponentTests: XCTestCase {
+final class VAEComponentTests: MLXTestCase {
   private let logger = Logger(label: "test.vae-components")
 
   private func makeTestConfig() -> VAEConfig {

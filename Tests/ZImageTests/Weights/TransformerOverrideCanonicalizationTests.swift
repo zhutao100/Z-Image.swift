@@ -4,7 +4,7 @@ import XCTest
 
 @testable import ZImage
 
-final class TransformerOverrideCanonicalizationTests: XCTestCase {
+final class TransformerOverrideCanonicalizationTests: MLXTestCase {
   func testStripsModelDiffusionModelPrefix() {
     let w = MLXArray([Float(0.0)])
     let input = ["model.diffusion_model.layers.0.attention_norm1.weight": w]

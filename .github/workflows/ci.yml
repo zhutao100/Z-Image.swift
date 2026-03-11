@@ -1,15 +1,34 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  test:
     runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: 16.0
+
+      - name: Run SwiftPM tests
+        run: swift test
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,14 +42,15 @@ jobs:
         run: defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidation -bool YES
 
       - name: Build
-        run: |
-          xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath ./dist -skipPackagePluginValidation ENABLE_PLUGIN_PREPAREMLSHADERS=YES CLANG_COVERAGE_MAPPING=NO
+        run: DERIVED_DATA_PATH=./dist ./scripts/build.sh
 
       - name: Prepare Artifacts
         run: |
           cd ./dist/Build/Products/Release
           chmod +x ZImageCLI
           cp mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib .
+          ./ZImageCLI --help >/tmp/zimage-cli-help.txt 2>/tmp/zimage-cli-help.err
+          test -f default.metallib
           zip -r zimage.macos.arm64.zip ZImageCLI default.metallib
 
       - name: Get current date

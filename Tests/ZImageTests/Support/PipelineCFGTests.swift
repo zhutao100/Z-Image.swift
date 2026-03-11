@@ -3,12 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class PipelineCFGTests: XCTestCase {
-  override func setUpWithError() throws {
-    try super.setUpWithError()
-    try ensureMLXMetalLibraryColocated(for: type(of: self))
-  }
-
+final class PipelineCFGTests: MLXTestCase {
   func testUsesClassifierFreeGuidanceTreatsPositiveScaleAsEnabled() {
     XCTAssertFalse(PipelineUtilities.usesClassifierFreeGuidance(guidanceScale: 0.0))
     XCTAssertTrue(PipelineUtilities.usesClassifierFreeGuidance(guidanceScale: 0.5))

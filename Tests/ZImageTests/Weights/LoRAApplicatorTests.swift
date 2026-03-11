@@ -3,7 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class LoRAApplicatorTests: XCTestCase {
+final class LoRAApplicatorTests: MLXTestCase {
 
   private func makeTinyTransformer() throws -> ZImageTransformer2DModel {
     let configJSON = """

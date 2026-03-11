@@ -3,7 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class AIOVAECanonicalizationTests: XCTestCase {
+final class AIOVAECanonicalizationTests: MLXTestCase {
 
   func testCanonicalizeComfyUIVAENamesToDiffusers() {
     let linearLike = MLXArray([Float](repeating: 0.0, count: 4), [2, 2, 1, 1]).asType(.bfloat16)

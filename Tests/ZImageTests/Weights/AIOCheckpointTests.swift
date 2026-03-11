@@ -4,7 +4,7 @@ import XCTest
 
 @testable import ZImage
 
-final class AIOCheckpointTests: XCTestCase {
+final class AIOCheckpointTests: MLXTestCase {
 
   func testInspectDetectsAIOCheckpoint() throws {
     let tempDir = FileManager.default.temporaryDirectory

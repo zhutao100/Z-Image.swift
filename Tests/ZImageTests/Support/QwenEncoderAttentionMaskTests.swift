@@ -3,7 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class QwenEncoderAttentionMaskTests: XCTestCase {
+final class QwenEncoderAttentionMaskTests: MLXTestCase {
   private func makeEncoder() -> QwenEncoder {
     QwenEncoder(
       configuration: .init(

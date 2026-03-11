@@ -6,7 +6,7 @@ import XCTest
 #if canImport(CoreGraphics)
   import CoreGraphics
 
-  final class ImageIOTests: XCTestCase {
+  final class ImageIOTests: MLXTestCase {
 
     // MARK: - Array from CGImage Tests
 

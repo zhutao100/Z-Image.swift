@@ -3,7 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class ControlTransformerBlockTests: XCTestCase {
+final class ControlTransformerBlockTests: MLXTestCase {
   private func makeBlock(blockId: Int, dim: Int = 16) -> ZImageControlTransformerBlock {
     ZImageControlTransformerBlock(
       blockId: blockId,

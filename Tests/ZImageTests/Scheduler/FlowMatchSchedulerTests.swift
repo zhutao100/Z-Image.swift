@@ -3,7 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class FlowMatchSchedulerTests: XCTestCase {
+final class FlowMatchSchedulerTests: MLXTestCase {
 
   // MARK: - Initialization Tests
 

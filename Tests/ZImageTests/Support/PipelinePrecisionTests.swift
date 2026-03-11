@@ -3,7 +3,7 @@ import XCTest
 
 @testable import ZImage
 
-final class PipelinePrecisionTests: XCTestCase {
+final class PipelinePrecisionTests: MLXTestCase {
   func testRuntimeDTypeUsesFirstFloatingParameter() {
     let embedder = ZImageTimestepEmbedder(outSize: 16, midSize: 16)
 
