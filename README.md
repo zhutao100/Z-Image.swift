@@ -2,23 +2,32 @@
 
 > An enhanced fork of the `mzbac/zimage.swift` project.
 
-Native Swift + MLX implementation of the `Tongyi-MAI/Z-Image` and `Tongyi-MAI/Z-Image-Turbo` model family for Apple Silicon.
+Native Swift + MLX implementation of the `Tongyi-MAI/Z-Image` model family for Apple Silicon.
 
-The repo ships two products:
+The repo ships:
 
 - `ZImage`: a Swift library for macOS and iOS targets
-- `ZImageCLI`: a macOS command-line interface
+- `ZImageCLI`: a macOS CLI for text-to-image, ControlNet, inpainting, and quantization workflows
 
-## What It Supports
+The practical goal is to run Z-Image locally without a Python runtime while still supporting the model-loading patterns people actually use: Hugging Face snapshots, local Diffusers-style folders, quantized directories, LoRA adapters, and text-to-image AIO / transformer-only `.safetensors` files.
+
+## Current Capabilities
 
 - Text-to-image generation with the Z-Image diffusion transformer and Flow Match scheduler
 - ControlNet conditioning and inpainting via `ZImageCLI control`
-- LoRA and LoKr adapters on the text-to-image CLI and in the library pipelines
-- 4-bit and 8-bit quantization for the Turbo model and ControlNet weights
-- Hugging Face snapshots, local Diffusers-style model folders, local AIO `.safetensors`, and transformer-only overrides
-- Optional prompt enhancement on the text-to-image CLI via the Qwen text encoder's generation path
+- LoRA and LoKr adapters on the text-to-image pipeline and CLI
+- Optional prompt enhancement on the text-to-image path through the Qwen text encoder generation flow
+- 4-bit and 8-bit quantization for base-model and ControlNet directories
+- Hugging Face cache reuse, local Diffusers-style directories, and text-to-image AIO / transformer-only `.safetensors`
 
 The default CLI model is `Tongyi-MAI/Z-Image-Turbo`.
+
+Known `Tongyi-MAI` ids get model-aware defaults:
+
+- Turbo: `1024x1024`, `9` steps, guidance `0.0`
+- Base: `1024x1024`, `50` steps, guidance `4.0`
+
+Local paths and unknown aliases still fall back to Turbo-compatible defaults unless you set `--steps` and `--guidance` explicitly.
 
 ## Examples
 
@@ -73,31 +82,19 @@ Note:
 - Apple Silicon Mac
 - macOS 14.0+
 - Xcode 16.x or another Swift 6 toolchain that can build the package
-- Network access for the first run unless you already have the weights locally
+- Network access on first run unless the weights are already cached locally
 
 ### Build
-
-The shortest path is the repo script:
 
 ```bash
 ./scripts/build.sh
 ```
 
-Equivalent explicit command:
-
-```bash
-xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode -skipPackagePluginValidation ENABLE_PLUGIN_PREPAREMLSHADERS=YES CLANG_COVERAGE_MAPPING=NO
-```
-
 ### Verify
-
-Run the default verification workflow with:
 
 ```bash
 swift test
 ```
-
-Opt-in integration and E2E suites are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ### Run
 
@@ -107,9 +104,9 @@ cd .build/xcode/Build/Products/Release
 ./ZImageCLI -p "a studio photo of a red apple on black velvet" -o output.png
 ```
 
-First run will download the default model snapshot into the Hugging Face cache.
+The first run downloads the default snapshot into the Hugging Face cache.
 
-### Minimal Examples
+### Minimal CLI Examples
 
 Turbo defaults:
 
@@ -126,6 +123,16 @@ Base model:
   -o base.png
 ```
 
+Text-to-image LoRA:
+
+```bash
+./ZImageCLI \
+  -p "a lion painted like a children's book illustration" \
+  --lora ostris/z_image_turbo_childrens_drawings \
+  --lora-scale 1.0 \
+  -o lora.png
+```
+
 ControlNet:
 
 ```bash
@@ -137,56 +144,71 @@ ControlNet:
   --output control.png
 ```
 
+Quantize a local base-model directory:
+
+```bash
+./ZImageCLI quantize \
+  --input models/z-image-turbo \
+  --output models/z-image-turbo-q8 \
+  --bits 8 \
+  --group-size 32
+```
+
+### Library Entry Points
+
+The library surface is pipeline-first:
+
+- `ZImageGenerationRequest` + `ZImagePipeline`
+- `ZImageControlGenerationRequest` + `ZImageControlPipeline`
+
+The code map for those entry points lives in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Configuration
 
-Common CLI settings:
+Common CLI knobs:
 
-- `--model/-m`: Hugging Face repo id, local model directory, or local `.safetensors`
-- known `Tongyi-MAI` model ids apply model-aware presets:
-  - Turbo: `1024x1024`, `9` steps, guidance `0.0`
-  - Base: `1024x1024`, `50` steps, guidance `4.0`
+- `--model/-m`: text-to-image accepts a Hugging Face repo id, local Diffusers-style directory, or local `.safetensors`; the control path expects a standard snapshot or directory
 - `--steps/-s`: literal denoising iterations / transformer forwards
   - the scheduler keeps one extra terminal sigma internally, so `8` steps means `8` transformer calls and `9` sigma values
   - some upstream model cards mix that scheduler detail into the prose around Turbo's "8-step" distillation; this repo treats `steps` as the literal iteration count
+- `--guidance/-g`: CFG scale
 - `--cfg-normalization`: clamp CFG output norm back to the positive-branch norm
-- `--cfg-truncation`: turn CFG off after the normalized denoising timestep passes the given value
-- `--weights-variant`: precision-specific weights selection such as `fp16` or `bf16`
+- `--cfg-truncation`: disable CFG once the normalized denoising timestep passes the given threshold
+- `--weights-variant`: prefer `fp16` or `bf16` component files when the snapshot ships multiple variants
+- `--force-transformer-override-only`: text-to-image only; skip AIO auto-detection for a local `.safetensors`
 - `--cache-limit`: MLX GPU cache limit in MB
 - `--max-sequence-length`: prompt token limit for text encoding
-- `--force-transformer-override-only`: treat a local `.safetensors` as a transformer override and skip AIO auto-detection
 
 Environment variables:
 
-- `HF_HUB_CACHE` or `HF_HOME`: override the Hugging Face cache location
-- `HF_TOKEN`: practical choice for gated or private Hugging Face repos
+- `HF_HUB_CACHE` or `HF_HOME`: override the Hugging Face cache root
+- `HF_TOKEN`: authenticate for gated or private Hugging Face repos
 - `HF_ENDPOINT`: override the Hugging Face API host
 
-The authoritative details for model resolution, cache lookup, AIO checkpoints, quantization manifests, and ControlNet weight loading live in [docs/MODELS_AND_WEIGHTS.md](docs/MODELS_AND_WEIGHTS.md).
-
-For repo-side regression checking against the real Base checkpoint, use the opt-in smoke test documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+The detailed behavior for cache lookup, local-path handling, AIO checkpoints, quantization manifests, and ControlNet weight loading lives in [docs/MODELS_AND_WEIGHTS.md](docs/MODELS_AND_WEIGHTS.md).
 
 ## Current Limitations
 
-- Model-aware CLI defaults currently key off the known `Tongyi-MAI` ids. Local paths and unknown aliases still fall back to Turbo-compatible defaults unless you set `--steps` and `--guidance` explicitly.
-- Third-party LoRA cards can recommend sampling settings that differ from the base-model defaults. The CLI keeps the resolved model defaults unless you pass `--steps` and `--guidance` explicitly; it does not try to parse adapter README files into presets.
-- `ZImageCLI control` exposes control, inpainting, and `--log-control-memory`, but it does not currently expose the control-pipeline LoRA and prompt-enhancement hooks that exist in the library request type.
-- First-time downloads are large, and high-resolution runs can still be memory-heavy on unified-memory systems.
-- The CLI target is macOS-only. The package also declares an iOS library target, but there is no first-party sample app in this repo.
+- Model-aware defaults are id-based. Local Base snapshots and unknown aliases still need explicit `--steps` and `--guidance` if you want Base-style sampling.
+- `ZImageCLI control` does not expose the control-pipeline LoRA or prompt-enhancement fields that exist in `ZImageControlGenerationRequest`.
+- Text-to-image supports local AIO / transformer-only `.safetensors`; the control path currently expects a standard model snapshot or local directory instead.
+- Third-party LoRA cards can recommend different sampling settings. The CLI does not parse adapter metadata into presets.
+- First-time downloads are large, and higher-resolution runs still stress unified memory.
+- The CLI is macOS-only. The package declares an iOS library target, but the repo does not ship a first-party sample app.
 
 ## Docs
 
 - [docs/README.md](docs/README.md): docs index and task-based reading order
-- [docs/CLI.md](docs/CLI.md): CLI usage, flags, and examples
-- [docs/MODELS_AND_WEIGHTS.md](docs/MODELS_AND_WEIGHTS.md): model selection, caching, AIO checkpoints, overrides, quantization
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): code structure and source-of-truth files
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): build, test, lint, CI, and validation workflows
-- [docs/dev_plans/ROADMAP.md](docs/dev_plans/ROADMAP.md): prioritized next steps
+- [docs/CLI.md](docs/CLI.md): CLI commands, flags, and examples
+- [docs/MODELS_AND_WEIGHTS.md](docs/MODELS_AND_WEIGHTS.md): model ids, local paths, cache lookup, AIO checkpoints, quantization
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): runtime layout, entry points, and source-of-truth files
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): build, test, CI, packaging, and validation workflows
 
 ## Acknowledgements
 
 - The original `mzbac/zimage.swift` repo for the initial implementation and reference point
-- The `Tongyi-MAI/Z-Image` and `Tongyi-MAI/Z-Image-Turbo` teams for the models, weights, and reference outputs that made this possible
-- The MLX team for the Swift bindings and MLX improvements that enabled the implementation and optimizations in this repo.
+- The `Tongyi-MAI/Z-Image` and `Tongyi-MAI/Z-Image-Turbo` teams for the models and reference outputs
+- The MLX team for the Swift bindings and runtime work that made the port practical
 
 ## License
 

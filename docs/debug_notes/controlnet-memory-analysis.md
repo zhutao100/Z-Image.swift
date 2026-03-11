@@ -7,7 +7,7 @@ Use this as a narrow ControlNet-specific follow-up note.
 For the validated phase-by-phase measurements and the fixes that already landed, see:
 
 - `docs/debug_notes/control-context-memory-remediation.md`
-- `docs/dev_plans/control-context-memory-remediation.md`
+- `docs/archive/dev_plans/control-context-memory-remediation.md`
 
 ## Validation Basis
 
@@ -30,7 +30,7 @@ Any statement below is source-based unless it explicitly cites the measured phas
 
 The final control-context tensor remains small relative to the observed process footprint.
 
-The measured high-resolution reference run in `control-context-memory-remediation.md` still ends with:
+The measured high-resolution reference run in `docs/debug_notes/control-context-memory-remediation.md` still ends with:
 
 - control-context shape: `[1, 33, 1, 288, 192]`
 - phase 3 peak memory footprint: `59,328,863,512` bytes

@@ -6,8 +6,10 @@ This document maps the current implementation to the source files that define it
 
 `zimage.swift` is a native Swift + MLX port of the `Tongyi-MAI/Z-Image` family. It provides:
 
-- `ZImage`: library API
+- `ZImage`: library target
 - `ZImageCLI`: macOS CLI wrapper
+
+The package is defined in `Package.swift`. There is no checked-in Xcode project or workspace; Xcode builds operate through the Swift package.
 
 The major runtime pieces are:
 
@@ -19,6 +21,8 @@ The major runtime pieces are:
 
 ## High-Level File Map
 
+- `Package.swift`
+  - package graph, platforms, products, and target boundaries
 - `Sources/ZImageCLI/main.swift`
   - CLI argument parsing, subcommands, progress reporting, and user-facing help text
 - `Sources/ZImage/Pipeline/`
@@ -26,7 +30,7 @@ The major runtime pieces are:
   - `ZImageControlPipeline.swift`: ControlNet and inpainting pipeline
   - `FlowMatchScheduler.swift`: scheduler implementation
   - `PipelineSnapshot.swift`: snapshot download and file-pattern helpers
-  - `PipelineUtilities.swift`: shared prompt-encoding and snapshot helpers
+  - `PipelineUtilities.swift`: shared prompt-encoding, CFG, dtype, and snapshot helpers
 - `Sources/ZImage/Model/`
   - `TextEncoder/`: Qwen tokenizer-facing encoder and optional generation path for prompt enhancement
   - `Transformer/`: base and control transformer blocks
@@ -49,16 +53,16 @@ The library is pipeline-first:
 - `ZImageGenerationRequest` + `ZImagePipeline`
 - `ZImageControlGenerationRequest` + `ZImageControlPipeline`
 
-Both request types now expose Diffusers-style CFG truncation and normalization controls in addition to the base guidance scale.
+Both request types expose CFG truncation and normalization controls in addition to the base guidance scale.
 
 Current asymmetry to know about:
 
-- the library control request type already has LoRA and prompt-enhancement fields
-- `ZImageCLI control` does not currently expose those flags
+- the control request type already has LoRA and prompt-enhancement fields
+- `ZImageCLI control` does not expose those flags yet
 
 ## Model Selection And Snapshot Loading
 
-The runtime treats model specs in four forms:
+The text-to-image runtime treats model specs in four forms:
 
 - default repo id from `ZImageRepository.id`
 - Hugging Face repo id, optionally with `:revision`
@@ -67,6 +71,8 @@ The runtime treats model specs in four forms:
   - AIO checkpoint when it contains all expected components
   - transformer-only override otherwise
 
+The control pipeline uses the standard snapshot resolver and expects a regular snapshot or local directory. It does not currently expose the text-to-image AIO / transformer-only override path.
+
 The loading path is split across:
 
 - `Sources/ZImage/Weights/ModelResolution.swift`
@@ -74,7 +80,7 @@ The loading path is split across:
 - `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 - `Sources/ZImage/Weights/AIOCheckpoint.swift`
 
-Known model ids and per-model presets are centralized in `Sources/ZImage/Support/ZImageModelRegistry.swift`. The CLI now applies those presets only to fields the user did not set. Current nuance: that preset lookup is id-based, so local paths and unknown model ids still fall back to the Turbo-compatible preset unless the caller overrides the relevant fields explicitly.
+Known model ids and per-model presets are centralized in `Sources/ZImage/Support/ZImageModelRegistry.swift`. The CLI applies those presets only to fields the user did not set. Current nuance: preset lookup is id-based, so local paths and unknown model ids still fall back to the Turbo-compatible preset unless the caller overrides the relevant fields explicitly.
 
 ## Weight Mapping
 
@@ -121,9 +127,9 @@ Source of truth: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
 The control pipeline intentionally narrows module residency while building control context:
 
 1. prompt embeddings are produced and cached
-2. transformer, ControlNet, and active LoRA state are unloaded when they are not needed for control-context construction
+2. transformer, ControlNet, and active LoRA state stay absent until denoising is about to start
 3. an encoder-only VAE is loaded for control or inpaint encoding and unloaded again after the typed control-context tensor is materialized
-4. MLX cache is cleared before denoiser modules are reloaded
+4. MLX cache is cleared before denoiser modules are loaded
 5. a decoder-only VAE is loaded only for final decode
 
 Supporting implementation points:
@@ -155,8 +161,8 @@ LoRA support is split into three stages:
 ## Tests
 
 - `Tests/ZImageTests/`: default fast suite
-- `Tests/ZImageIntegrationTests/`: slower, weight-dependent tests
-- `Tests/ZImageE2ETests/`: build and run the CLI
+- `Tests/ZImageIntegrationTests/`: slower, weight-dependent tests gated by `ZIMAGE_RUN_INTEGRATION_TESTS=1`
+- `Tests/ZImageE2ETests/`: CLI build-and-run tests gated by `ZIMAGE_RUN_E2E_TESTS=1`
 
 If you need to understand intended behavior before touching code, inspect the matching unit tests first, especially:
 

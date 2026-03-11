@@ -219,4 +219,4 @@ That means the Swift port is not paying the control-context cost because it inve
 1. No additional code phase from this note is currently required.
 2. Only consider tiled/sliced encode if the remaining `~59.3 GiB` high-resolution peak footprint is still above the deployment target for a specific machine or workflow.
 
-The measured execution plan for these changes lives in `docs/dev_plans/control-context-memory-remediation.md`.
+The measured execution plan for these changes now lives in `docs/archive/dev_plans/control-context-memory-remediation.md`.

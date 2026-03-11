@@ -13,7 +13,7 @@ Fast path:
 Explicit build command:
 
 ```bash
-xcodebuild -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
+xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode -skipPackagePluginValidation ENABLE_PLUGIN_PREPAREMLSHADERS=YES CLANG_COVERAGE_MAPPING=NO
 ```
 
 Run from the release products directory:
@@ -51,7 +51,7 @@ Useful flags:
 - `--cfg-truncation`: disable CFG after the normalized timestep passes the given value
 - `--seed`: deterministic sampling seed
 - `--output/-o`: output path, default `z-image.png`
-- `--model/-m`: model id, local directory, or local `.safetensors`
+- `--model/-m`: model id, local Diffusers-style directory, or local `.safetensors`
 - `--weights-variant`: precision-specific weight selection such as `fp16` or `bf16`
 - `--force-transformer-override-only`: force a local `.safetensors` to be treated as a transformer override instead of AIO
 - `--cache-limit`: MLX cache limit in MB
@@ -67,7 +67,7 @@ The CLI applies model-aware defaults for the built-in `Tongyi-MAI` model ids:
 - `Tongyi-MAI/Z-Image-Turbo`: `1024x1024`, `9` steps, guidance `0.0`
 - `Tongyi-MAI/Z-Image`: `1024x1024`, `50` steps, guidance `4.0`
 
-`--steps` is the literal denoising-iteration count in this repo. The scheduler keeps one extra terminal sigma internally, so `8` steps means `8` transformer forwards and `9` sigma values. This matches the current built-in diffusers scheduler semantics as well.
+`--steps` is the literal denoising-iteration count in this repo. The scheduler keeps one extra terminal sigma internally, so `8` steps means `8` transformer forwards and `9` sigma values.
 
 Explicit flags still override those values field by field. Example:
 
@@ -82,16 +82,9 @@ Important nuance: preset lookup is id-based. Local paths and unknown model ids k
 
 LoRA nuance: third-party adapter cards can recommend sampling settings that differ from the base-model defaults. The CLI does not auto-parse adapter README files into presets, so keep `--steps` and `--guidance` explicit when an adapter card calls out values.
 
-### CFG Parity Controls
-
-Two additional flags mirror the Base-oriented Diffusers CFG controls:
-
-- `--cfg-normalization`: when enabled, the guided prediction is renormalized so it does not exceed the positive-branch norm
-- `--cfg-truncation <value>`: if the normalized denoising timestep rises above `<value>`, CFG is skipped for the rest of the run. `1.0` keeps CFG active for the full schedule.
-
 ## Model Specs (`--model`)
 
-`--model/-m` accepts:
+On the text-to-image command, `--model/-m` accepts:
 
 - Hugging Face repo id: `org/repo`
 - Hugging Face repo id with revision: `org/repo:revision`
@@ -99,6 +92,8 @@ Two additional flags mirror the Base-oriented Diffusers CFG controls:
 - Local `.safetensors`
   - AIO checkpoint if the file contains all expected components
   - transformer-only override otherwise
+
+If you point `--model` at a local directory that does not contain the expected Diffusers-style configs but does contain `.safetensors`, the text-to-image resolver picks a preferred file from that directory and inspects it as a local checkpoint. If the directory contains neither the expected configs nor any `.safetensors`, the text-to-image pipeline warns and falls back to the default model.
 
 See [MODELS_AND_WEIGHTS.md](MODELS_AND_WEIGHTS.md) for resolver details.
 
@@ -167,7 +162,11 @@ Known `Tongyi-MAI` model ids use the same model-aware defaults on the `control` 
 
 At least one of `--control-image`, `--inpaint-image`, or `--mask` must be present.
 
-Current limitation: `ZImageCLI control` does not currently expose the control-pipeline LoRA or prompt-enhancement fields that exist in the library request type.
+Current control-path nuances:
+
+- `--model` on the control command resolves a standard model snapshot or local directory. The control pipeline does not expose the text-to-image AIO / transformer-only `.safetensors` override path.
+- `--weights-variant` applies to the base model snapshot, not the ControlNet weights source.
+- `ZImageCLI control` does not expose the control-pipeline LoRA or prompt-enhancement fields that exist in the library request type.
 
 ## Quantization
 
@@ -203,4 +202,4 @@ After quantization, point `--model` or `--controlnet-weights` at the output dire
 
 The repo also keeps an opt-in real-model Base smoke test for regression checking. The exact command lives in [DEVELOPMENT.md](DEVELOPMENT.md).
 
-For the underlying control-memory policy and validation recipe, see [DEVELOPMENT.md](DEVELOPMENT.md).
+For the underlying control-memory policy and validation recipe, see [DEVELOPMENT.md](DEVELOPMENT.md) and [dev_plans/controlnet-memory-followup.md](dev_plans/controlnet-memory-followup.md).

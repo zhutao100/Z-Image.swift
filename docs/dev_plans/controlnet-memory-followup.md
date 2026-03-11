@@ -1,55 +1,50 @@
-# ControlNet Memory Follow-Up Plan
+# ControlNet Memory Follow-Up
 
-This plan turns the still-open findings in `docs/debug_notes/controlnet-memory-analysis.md` into a measured next sequence after the completed March 7, 2026 remediation work.
+This is the current control-memory status note for the repo. It replaces the older "multi-phase plan" framing now that the main March 2026 fixes have landed.
 
-Execution status: phases 1 and 2 completed on March 8, 2026; phase 3 not pursued.
+## Current Status
 
-## Goal
+The control pipeline already keeps the main pre-denoising lifecycle boundaries intentionally narrow:
 
-Reduce the remaining control-path peak memory pressure without changing control-image semantics or fixed-seed output quality.
+- prompt embeddings are built before transformer and ControlNet loading
+- the control and inpaint path uses an encoder-only VAE that is released after the typed control context is materialized
+- MLX cache is cleared before denoiser modules are loaded
+- the final image decode uses a decoder-only VAE
+- `--log-control-memory` exposes the supported runtime probe for those boundaries
 
-Current measured comparison baseline for this follow-up pass:
+Measured follow-up result retained from the March 8, 2026 high-resolution rerun:
 
-- source: March 8, 2026 rerun of commit `555fec6`
-- `/usr/bin/time -l` maximum resident set size: `42,644,701,184` bytes
-- `/usr/bin/time -l` peak memory footprint: `59,326,700,800` bytes
-- fixed-seed output SHA-256: `b5f1585314323c7e12f3a4871644346ac9d5f2470cfbf74c11935e9f2c558b98`
+- `prompt-embeddings.after-clear-cache`: `6.26 GiB` resident after deferred loading
+- `control-context.after-clear-cache`: about `315 MiB`
+- `transformer.denoising-load.after-apply`: about `23.24 GiB` resident
+- `controlnet.denoising-load.after-apply`: about `29.49 GiB` resident
+- `/usr/bin/time -l` peak memory footprint: about `59.3 GiB`
 
-Historical note:
+The practical takeaway is that the stored control context is no longer the dominant limiter. The remaining large jump is the live denoiser residency, not control-context storage.
 
-- the March 7, 2026 remediation log recorded the saved quality artifact hash `2afd1fa9...`
-- current reruns of commit `555fec6` on March 8, 2026 reproduce `b5f15853...`
-- this follow-up plan uses the March 8 rerun as the acceptance baseline for any new phase
+## What Is Still Worth Doing
 
-## Scope
+Only reopen this area if one of these is true:
 
-- `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
-- targeted lifecycle helpers if they reduce duplicate load and unload logic
-- optional control and inpaint VAE encode work under `Sources/ZImage/Model/VAE/*`
-- targeted unit coverage under `Tests/ZImageTests/`
-- supporting docs under `docs/`
+- a regression changes the control-memory markers materially
+- a target machine or workflow still cannot tolerate the retained `1536x2304` high-resolution footprint
+- a larger loader or denoiser refactor changes residency policy and needs fresh measurements
 
-## Non-Goals
+The next meaningful reduction would need to target denoiser residency or offload policy. Tiled control or inpaint VAE encode is not the default next step for the current measured workload.
 
-- changing ControlNet conditioning math
-- changing scheduler behavior
-- broad refactors across the base text-to-image pipeline unless needed to keep loader conventions aligned
-
-## Validation Protocol
-
-Every phase must be evaluated before it is wrapped.
+## Validation Recipe
 
 Repo verification:
 
 ```bash
 swift test
-xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath .build/xcode
+./scripts/build.sh
 ```
 
-High-resolution memory probe:
+High-resolution probe:
 
 ```bash
-/usr/bin/time -l ./.build/xcode/Build/Products/Release/ZImageCLI control \
+.build/xcode/Build/Products/Release/ZImageCLI control \
   --prompt "memory validation" \
   --control-image images/canny.jpg \
   --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
@@ -61,217 +56,17 @@ High-resolution memory probe:
   --seed 1234 \
   --log-control-memory \
   --no-progress \
-  --output /tmp/zimage-control-followup/<phase>_memory.png
+  --output /tmp/zimage-control-memory-check.png
 ```
 
-Fixed-seed quality probe:
+Watch these markers:
 
-```bash
-/usr/bin/time -l ./.build/xcode/Build/Products/Release/ZImageCLI control \
-  --prompt "a stone archway covered in moss, cinematic lighting" \
-  --control-image images/canny.jpg \
-  --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
-  --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
-  --width 512 \
-  --height 512 \
-  --steps 4 \
-  --guidance 0 \
-  --seed 1234 \
-  --no-progress \
-  --output /tmp/zimage-control-followup/<phase>_quality.png
-```
+- `prompt-embeddings.after-clear-cache`
+- `control-context.after-baseline-reduction`
+- `control-context.after-clear-cache`
+- `transformer.denoising-load.after-apply`
+- `controlnet.denoising-load.after-apply`
+- `denoising.before-start`
+- `decode.after-eval`
 
-Required metrics per phase:
-
-1. `prompt-embeddings.after-clear-cache`
-2. `control-context.after-baseline-reduction`
-3. `control-context.after-clear-cache`
-4. `denoising.before-start`
-5. `decode.after-eval`
-6. `/usr/bin/time -l` maximum resident set size
-7. `/usr/bin/time -l` peak memory footprint
-8. output SHA-256 and image drift versus the phase 3 baseline and the immediately previous phase
-
-Preferred image metrics:
-
-- mean absolute pixel error
-- max absolute pixel delta
-- PSNR
-
-Acceptance bar:
-
-- no broken image, NaN-like failure, or shape mismatch
-- no unexpected regression in the high-resolution memory probe
-- phase 1 should reduce or eliminate avoidable loader churn
-- later phases should only proceed if the previous phase leaves a meaningful memory target unmet
-- output semantics should stay bit-identical or differ only by a trivial and explainable amount
-
-## Phase 1: Defer Transformer And ControlNet Loading
-
-Status: completed on March 8, 2026
-
-Objective:
-
-- stop loading the transformer and optional ControlNet before prompt encoding and control-context construction
-
-Files:
-
-- `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
-- `Tests/ZImageTests/`
-- `docs/`
-
-Implementation notes:
-
-- keep tokenizer and text encoder lifecycle unchanged unless the refactor proves a tighter policy is simpler
-- resolve model paths and weight metadata early, but instantiate transformer and ControlNet modules only when denoising is about to start
-- remove the current unload and reload churn if the modules can simply remain absent until needed
-- keep externally visible CLI and pipeline behavior unchanged
-
-Acceptance criteria:
-
-- the control path no longer performs an unnecessary transformer and ControlNet load before prompt embedding work
-- the measured pre-control baseline and/or denoising start boundary improves versus the phase 3 reference
-- fixed-seed output remains effectively unchanged
-
-Execution result:
-
-- the final landed variant defers both transformer and ControlNet loading until denoising
-- versus the March 8 rerun baseline:
-  - `prompt-embeddings.after-clear-cache`: `35.18 GiB -> 6.26 GiB`
-  - `/usr/bin/time -l` maximum resident set size: `42,644,701,184 -> 38,382,632,960`
-  - `/usr/bin/time -l` peak memory footprint: `59,326,700,800 -> 59,324,947,664`
-- the fixed-seed output stayed bit-identical to the March 8 rerun baseline:
-  - phase 1 SHA-256: `b5f1585314323c7e12f3a4871644346ac9d5f2470cfbf74c11935e9f2c558b98`
-  - phase 1 vs baseline MAE: `0.0000`
-  - phase 1 vs baseline max absolute pixel delta: `0`
-  - phase 1 vs baseline PSNR: `inf`
-- the large prompt-stage and RSS drop justified landing the phase even though peak memory footprint stayed effectively flat
-
-## Phase 2: Consolidate Lifecycle Boundaries And Telemetry
-
-Status: completed on March 8, 2026
-
-Objective:
-
-- make remaining memory jumps attributable and keep loader policy easy to reason about
-
-Files:
-
-- `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
-- targeted shared helpers if needed
-- `docs/`
-
-Implementation notes:
-
-- add or tighten telemetry around module load, unload, and first-use boundaries only where phase 1 still leaves attribution gaps
-- consolidate duplicated loader sequencing into a narrow helper if phase 1 introduces parallel load paths
-- do not widen the refactor into generic loader abstractions unless duplication is real and current
-
-Acceptance criteria:
-
-- logs clearly isolate the residual lifecycle transitions that still matter
-- loader sequencing is simpler than the pre-phase code, not more abstract
-- memory and quality stay at least as good as phase 1
-
-Execution result:
-
-- added telemetry at the deferred denoising load boundary
-- the high-resolution probe now isolates the remaining jump cleanly:
-  - `transformer.denoising-load.after-apply`: resident `23.24 GiB`, active `22.93 GiB`
-  - `controlnet.denoising-load.after-apply`: resident `29.49 GiB`, active `29.19 GiB`
-  - `denoising.before-start`: resident `29.49 GiB`, active `29.19 GiB`
-- that shows the remaining pre-denoising climb is not hidden control-context residue; it is the live transformer plus ControlNet residency required for denoising
-- fixed-seed output stayed bit-identical to phase 1 and the March 8 rerun baseline:
-  - phase 2 SHA-256: `b5f1585314323c7e12f3a4871644346ac9d5f2470cfbf74c11935e9f2c558b98`
-
-## Phase 3: Optional Tiled Control And Inpaint VAE Encode
-
-Status: skipped on March 8, 2026
-
-Objective:
-
-- reduce the remaining monolithic control-context build spike if lifecycle cleanup is not sufficient
-
-Files:
-
-- `Sources/ZImage/Model/VAE/*`
-- `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
-- `Tests/ZImageTests/`
-- `docs/`
-
-Implementation notes:
-
-- keep the latent-space math aligned with the existing control and inpaint encode path
-- prefer the smallest practical tiling or striping strategy that can be validated with fixed-seed comparisons
-- treat this as a structural phase only if the deferred-loading work still leaves the high-resolution probe above the practical target
-
-Acceptance criteria:
-
-- the control-context build path shows a material peak-memory reduction beyond phase 1 and 2
-- quality drift is zero or small enough to quantify and justify
-- the implementation does not duplicate a second independent encode stack unnecessarily
-
-Execution decision:
-
-- phase 3 was not pursued
-- after phase 2, `control-context.after-clear-cache` stayed around `314.61 MiB` while the denoising load boundary returned to `29.49 GiB`
-- that means tiled control and inpaint VAE encode would not address the remaining peak-memory limiter for this workload
-- the next meaningful reduction would need to target denoiser residency directly, not control-context construction
-
-## Execution Log
-
-- Baseline rerun: completed on March 8, 2026 from commit `555fec6`.
-  - `prompt-embeddings.after-clear-cache`: resident `35.18 GiB`, active `29.18 GiB`, cache `0 B`
-  - `control-context.after-baseline-reduction`: resident `997.77 MiB`, active `67.87 MiB`, cache `0 B`
-  - `control-context.after-clear-cache`: resident `308.45 MiB`, active `71.36 MiB`, cache `0 B`
-  - `denoising.before-start`: resident `29.48 GiB`, active `29.19 GiB`, cache `65.30 MiB`
-  - `decode.after-eval`: resident `408.55 MiB`, active `127.48 MiB`, cache `39.00 GiB`, MLX peak `37.02 GiB`
-  - `/usr/bin/time -l` maximum resident set size: `42,644,701,184` bytes
-  - `/usr/bin/time -l` peak memory footprint: `59,326,700,800` bytes
-  - output SHA-256: `b5f1585314323c7e12f3a4871644346ac9d5f2470cfbf74c11935e9f2c558b98`
-- Phase 1: completed on March 8, 2026.
-  - Scope landed:
-    - defer transformer loading until prompt embeddings and control-context construction are complete
-    - defer ControlNet loading until the denoising boundary
-    - keep tokenizer, text encoder, VAE encoder, and final decoder lifecycles unchanged
-  - Phase 1 high-resolution memory probe:
-    - `prompt-embeddings.after-clear-cache`: resident `6.26 GiB`, active `2.50 MiB`, cache `0 B`
-    - `control-context.after-baseline-reduction`: resident `1006.81 MiB`, active `67.87 MiB`, cache `0 B`
-    - `control-context.after-clear-cache`: resident `317.66 MiB`, active `71.36 MiB`, cache `0 B`
-    - `denoising.before-start`: resident `29.50 GiB`, active `29.19 GiB`, cache `65.30 MiB`
-    - `decode.after-eval`: resident `417.75 MiB`, active `127.48 MiB`, cache `39.00 GiB`, MLX peak `32.67 GiB`
-    - `/usr/bin/time -l` maximum resident set size: `38,382,632,960` bytes
-    - `/usr/bin/time -l` peak memory footprint: `59,324,947,664` bytes
-  - Phase 1 fixed-seed quality probe:
-    - output SHA-256: `b5f1585314323c7e12f3a4871644346ac9d5f2470cfbf74c11935e9f2c558b98`
-    - phase 1 vs baseline MAE: `0.0000`
-    - phase 1 vs baseline max absolute pixel delta: `0`
-    - phase 1 vs baseline PSNR: `inf`
-  - Assessment:
-    - the prompt-stage baseline collapsed by roughly `28.92 GiB`
-    - maximum RSS improved by about `4.26 GiB`
-    - peak memory footprint stayed effectively flat, so the remaining issue moved cleanly to the denoising load boundary rather than disappearing
-- Phase 2: completed on March 8, 2026.
-  - Scope landed:
-    - add `transformer.denoising-load.after-apply` telemetry
-    - add `controlnet.denoising-load.after-apply` telemetry
-    - keep runtime behavior otherwise unchanged from phase 1
-  - Phase 2 high-resolution memory probe:
-    - `prompt-embeddings.after-clear-cache`: resident `5.78 GiB`, active `2.50 MiB`, cache `0 B`
-    - `control-context.after-baseline-reduction`: resident `1003.34 MiB`, active `67.87 MiB`, cache `0 B`
-    - `control-context.after-clear-cache`: resident `314.61 MiB`, active `71.36 MiB`, cache `0 B`
-    - `transformer.denoising-load.after-apply`: resident `23.24 GiB`, active `22.93 GiB`, cache `65.30 MiB`
-    - `controlnet.denoising-load.after-apply`: resident `29.49 GiB`, active `29.19 GiB`, cache `65.30 MiB`
-    - `denoising.before-start`: resident `29.49 GiB`, active `29.19 GiB`, cache `65.30 MiB`
-    - `decode.after-eval`: resident `414.14 MiB`, active `127.48 MiB`, cache `39.00 GiB`, MLX peak `32.67 GiB`
-    - `/usr/bin/time -l` maximum resident set size: `38,378,668,032` bytes
-    - `/usr/bin/time -l` peak memory footprint: `59,320,278,272` bytes
-  - Phase 2 fixed-seed quality probe:
-    - output SHA-256: `b5f1585314323c7e12f3a4871644346ac9d5f2470cfbf74c11935e9f2c558b98`
-    - phase 2 vs phase 1 MAE: `0.0000`
-    - phase 2 vs phase 1 max absolute pixel delta: `0`
-    - phase 2 vs phase 1 PSNR: `inf`
-  - Assessment:
-    - the new markers show the remaining rise is the denoiser modules themselves, not latent control-context residue
-    - memory and quality stayed effectively unchanged from phase 1
-    - this closes the attribution question cleanly enough to stop before phase 3
+For the phase-by-phase March 2026 implementation history, use the historical notes under `docs/debug_notes/`.

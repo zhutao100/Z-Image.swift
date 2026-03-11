@@ -254,8 +254,8 @@ enum ZImageCLI {
 
         control                Generate with ControlNet conditioning
           --prompt, -p         Text prompt (required)
-          --control-image, -c  Control image path (required)
-          --controlnet-weights Path to controlnet weights dir or HF ID (required)
+          --control-image, -c  Control image path (optional; one of control image/inpaint image/mask required)
+          --controlnet-weights Path to controlnet weights, local file/dir, or HuggingFace ID (required)
           --control-scale      Control scale (default: 0.75)
           Use 'ZImageCLI control --help' for full options
 
@@ -264,7 +264,7 @@ enum ZImageCLI {
         ZImageCLI -p "a sunset" -m models/z-image-turbo-q8
         ZImageCLI -p "a forest" -m Tongyi-MAI/Z-Image-Turbo
         ZImageCLI -p "a black tiger in a bamboo forest" -m Tongyi-MAI/Z-Image
-        ZImageCLI -p "a cut a cat" --lora ostris/z_image_turbo_childrens_drawings
+        ZImageCLI -p "a cute cat" --lora ostris/z_image_turbo_childrens_drawings
         ZImageCLI -p "cat" --enhance  # Enhanced prompt generation
       """)
   }

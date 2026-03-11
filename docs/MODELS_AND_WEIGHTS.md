@@ -8,12 +8,13 @@ This document explains how the current repo resolves model sources, chooses weig
 - Also supported in the current codebase:
   - `Tongyi-MAI/Z-Image`
   - `mzbac/z-image-turbo-8bit`
+  - `mzbac/Z-Image-Turbo-8bit` as a capitalization-compatible alias
 
 Known ids and per-model presets live in `Sources/ZImage/Support/ZImageModelRegistry.swift`.
 
 ## Accepted Model Specs
 
-`--model/-m` and the library request types accept:
+The text-to-image path accepts:
 
 1. Hugging Face repo id: `org/repo`
 2. Hugging Face repo id with revision: `org/repo:revision`
@@ -28,15 +29,32 @@ Resolution behavior comes from:
 - `Sources/ZImage/Pipeline/PipelineSnapshot.swift`
 - `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 
+The control pipeline currently uses the standard snapshot resolver and expects a normal local directory or Hugging Face snapshot for `request.model`. It does not expose the text-to-image AIO / transformer-only `.safetensors` path.
+
 ## Resolution Order
 
-When a model spec is provided:
+### Text-To-Image Resolver
+
+When a text-to-image model spec is provided:
 
 1. If it is an existing local path, the repo uses that path directly.
+   - Local Diffusers-style directory: use it as-is.
+   - Local `.safetensors`: inspect for AIO coverage first; treat it as a transformer-only override otherwise.
+   - Local directory without the expected configs but with `.safetensors`: pick a preferred file from the directory, favoring filenames that contain `v2`, otherwise the largest `.safetensors`, then inspect that file as a local checkpoint.
+   - Local directory without the expected configs and without any `.safetensors`: the text-to-image pipeline warns and falls back to the default model.
 2. Otherwise, if it looks like `org/repo` or `org/repo:revision`, the repo checks the Hugging Face cache.
 3. If no matching snapshot is cached, it downloads the required files into the Hugging Face cache and then loads from that snapshot.
 
 When no model spec is provided, the same logic is applied to the default model id and revision.
+
+### Control Resolver
+
+`ZImageControlPipeline` goes through `PipelineSnapshot.prepare(...)` and expects a regular snapshot layout. In practice that means:
+
+- Hugging Face repo id, optionally with `:revision`
+- local Diffusers-style model directory
+
+If you need text-to-image-style AIO or transformer-only override behavior, that currently exists only on the text-to-image path.
 
 ## Hugging Face Cache And Environment Variables
 
@@ -65,7 +83,7 @@ The repo relies on the Hugging Face client libraries' environment-based authenti
 
 If a repo requires auth and loading fails, the two supported fallback paths are:
 
-- authenticate and rerun, or
+- authenticate and rerun
 - download the weights locally and point `--model` or `--controlnet-weights` at the local path
 
 ## Weights Variants (`--weights-variant`)
@@ -84,6 +102,8 @@ This behavior is implemented in:
 - `Sources/ZImage/Weights/ModelPaths.swift`
 - `Sources/ZImage/Weights/ZImageWeightsMapper.swift`
 - `Sources/ZImage/Pipeline/PipelineSnapshot.swift`
+
+Current nuance: `weightsVariant` selects which files are loaded. It is not a global runtime compute-dtype switch.
 
 ## Quantized Models
 
@@ -130,6 +150,8 @@ To skip AIO auto-detection and force that behavior, use:
 
 - CLI: `--force-transformer-override-only`
 
+This override path is currently implemented on the text-to-image pipeline only.
+
 The relevant code is in `Sources/ZImage/Pipeline/ZImagePipeline.swift`.
 
 ## ControlNet Weights
@@ -160,11 +182,15 @@ Source of truth:
 
 ### Wrong Results From `Tongyi-MAI/Z-Image`
 
-For the built-in `Tongyi-MAI/Z-Image` id, the CLI now applies Base-friendly defaults (`50` steps, guidance `4.0`).
+For the built-in `Tongyi-MAI/Z-Image` id, the CLI applies Base-friendly defaults (`50` steps, guidance `4.0`).
 
 If you point `--model` at a local Base snapshot or another unknown alias, the CLI cannot identify it as Base ahead of load time and will keep the Turbo-compatible preset unless you set `--steps` and `--guidance` explicitly.
 
 For repo-side regression checking against the real Base checkpoint, there is also an opt-in Base smoke test in `Tests/ZImageIntegrationTests/PipelineIntegrationTests.swift`; see [DEVELOPMENT.md](DEVELOPMENT.md) for the invocation.
+
+### Control Model Path Looks Valid But Fails
+
+The control pipeline expects a standard snapshot or local directory. If you pass a local text-to-image `.safetensors` file that works on the base path, the control path still cannot use that as a model override today.
 
 ### Offline Reuse
 

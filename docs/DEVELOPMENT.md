@@ -4,7 +4,7 @@ This document covers the current contributor workflow: build, test, format, rele
 
 ## Build
 
-Fast path:
+Default release-path build:
 
 ```bash
 ./scripts/build.sh
@@ -23,7 +23,7 @@ Equivalent explicit command:
 xcodebuild build -scheme ZImageCLI -configuration Release -destination 'platform=macOS' -derivedDataPath ./dist -skipPackagePluginValidation ENABLE_PLUGIN_PREPAREMLSHADERS=YES CLANG_COVERAGE_MAPPING=NO
 ```
 
-`scripts/build.sh` now uses the same non-interactive plugin flags as CI so local scripted builds match the release path more closely.
+`scripts/build.sh` uses the same non-interactive plugin flags as CI so local scripted builds match the release path more closely.
 
 ### SwiftPM-Only Binary Builds
 
@@ -44,14 +44,12 @@ Default verification path:
 swift test
 ```
 
-The MLX-backed test support now prepares the SwiftPM metallib automatically on demand, and the opt-in E2E suite will build the SwiftPM `ZImageCLI` product automatically when needed.
+The MLX-backed test support prepares the SwiftPM metallib automatically on demand, and the opt-in E2E suite builds the SwiftPM `ZImageCLI` product automatically when needed.
 
 Heavier test suites are opt-in:
 
 - `ZImageIntegrationTests`: require real model weights
 - `ZImageE2ETests`: build and execute the CLI
-
-Use those only when the task specifically needs them.
 
 Enable the heavier suites explicitly:
 
@@ -64,6 +62,11 @@ ZIMAGE_RUN_E2E_TESTS=1 swift test --filter CLIEndToEndTests
 ```
 
 `ZImageE2ETests` use the `ZImageCLI` executable built by the same SwiftPM stack as `swift test`. They do not invoke `xcodebuild` internally.
+
+Additional integration-test knobs:
+
+- `ZIMAGE_BASE_SMOKE_MODEL`: optional local override for the Base smoke test snapshot path
+- `ZIMAGE_TEST_LORA_PATH`: optional local LoRA path override for `LoRAIntegrationTests`
 
 ### Opt-In Base Smoke Test
 
@@ -80,7 +83,6 @@ Notes:
 
 - `ZIMAGE_RUN_BASE_SMOKE=1` is required; otherwise the test skips.
 - `ZIMAGE_BASE_SMOKE_MODEL` is optional. When omitted, the test uses `Tongyi-MAI/Z-Image` and resolves it through the normal cache/download path.
-- The MLX test helpers prepare the SwiftPM metallib automatically when the test first touches MLX-backed execution.
 
 ## CI And Packaging
 
@@ -141,26 +143,36 @@ Watch these markers:
 - `control-context.after-baseline-reduction`
 - `control-context.after-eval`
 - `control-context.after-clear-cache`
+- `transformer.denoising-load.after-apply`
+- `controlnet.denoising-load.after-apply`
 - `decode.after-eval`
 
 Current retained policy:
 
 - keep `--log-control-memory` as the public probe
-- unload transformer, ControlNet, and active LoRA state before control-context build when they are not needed
+- keep transformer, ControlNet, and active LoRA state absent until denoising is about to start
 - load the control-path VAE encoder on demand and unload it immediately after the typed control context is materialized
-- clear MLX cache before denoiser modules are reloaded
+- clear MLX cache before denoiser modules are loaded
 - keep incremental ControlNet hint accumulation
 - keep query-chunked VAE self-attention enabled by default
+
+Current measured status from the March 8, 2026 follow-up run:
+
+- high-resolution `1536x2304` control-context residency after cache clear stayed around `315 MiB`
+- the remaining large jump happens at the deferred denoiser load boundary, not during control-context storage
+- the retained high-resolution probe still peaked around `59.3 GiB` process footprint
+
+The current follow-up summary lives in [dev_plans/controlnet-memory-followup.md](dev_plans/controlnet-memory-followup.md).
 
 ### Numerical-Parity Work
 
 If you are chasing Swift vs Python or Diffusers drift, read:
 
 - [golden_checks.md](golden_checks.md)
-- `docs/context/`
+- [context/zimage_runtime_precision_parity_report.md](context/zimage_runtime_precision_parity_report.md)
 
 Those docs are the current background set for parity and precision work.
 
 ## Performance Notes
 
-These models are large. First-time downloads can be tens of GB, and higher resolutions still stress unified memory. Historical investigations live under `docs/archive/`; the current control-memory outcome is captured in `docs/dev_plans/control-context-memory-remediation.md` and `docs/dev_plans/controlnet-memory-followup.md`.
+These models are large. First-time downloads can be tens of GB, and higher resolutions still stress unified memory. Historical investigations live under `docs/debug_notes/` and `docs/archive/`; the current operating summary lives in [dev_plans/controlnet-memory-followup.md](dev_plans/controlnet-memory-followup.md).
