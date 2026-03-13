@@ -47,6 +47,7 @@ This guide is for agents working inside `zimage.swift`. Treat the code and tests
 
 - package layout and supported platforms: `Package.swift`
 - CLI flags and help output: `Sources/ZImageCLICommon/`
+- staging service protocol and queue semantics: `Sources/ZImageServeCore/ServiceModels.swift` and `Sources/ZImageServeCore/StagingService.swift`
 - Text-to-image API: `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 - ControlNet and inpainting API: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
 - Serving residency policy surface: `Sources/ZImage/Pipeline/RuntimeOptions.swift`
@@ -67,7 +68,7 @@ This guide is for agents working inside `zimage.swift`. Treat the code and tests
   - `ZImageTransformer2DModel` and `ZImageControlTransformer2DModel`
   - CLI help text and docs
 - When changing user-visible behavior, update the matching docs in the same change:
-  - CLI behavior: `README.md`, `docs/CLI.md`, `Sources/ZImageCLICommon/`, `Sources/ZImageCLI/main.swift`, and `Sources/ZImageServe/main.swift`
+  - CLI behavior: `README.md`, `docs/CLI.md`, `Sources/ZImageCLICommon/`, `Sources/ZImageCLI/main.swift`, `Sources/ZImageServe/main.swift`, and `Sources/ZImageServeCore/ServiceModels.swift` when the staged protocol or status output changes
   - Model loading semantics: `docs/MODELS_AND_WEIGHTS.md`, `docs/ARCHITECTURE.md`, relevant files in `Sources/ZImage/Weights/`
   - Build/test/release workflow: `docs/DEVELOPMENT.md`, `.github/workflows/ci.yml`, and helper scripts
 - Prefer `docs/` as the detailed explanation layer. Keep `README.md` short and link outward.

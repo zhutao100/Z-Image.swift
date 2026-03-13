@@ -20,6 +20,13 @@ The major runtime pieces are:
 4. weight resolution and safetensors mapping
 5. optional LoRA and quantization layers
 
+The staging surface keeps parsing and ingestion on the client side. The daemon only accepts canonical socket requests:
+
+- `submit`
+- `status`
+- `cancel`
+- `shutdown`
+
 ## High-Level File Map
 
 - `Package.swift`
@@ -27,11 +34,15 @@ The major runtime pieces are:
 - `Sources/ZImageCLI/main.swift`
   - thin one-shot entrypoint for the shared CLI layer
 - `Sources/ZImageServe/main.swift`
-  - staging-daemon entrypoint and client-side submission flow
+  - staging-daemon entrypoint plus client-side ad hoc, batch, markdown, and operational commands
 - `Sources/ZImageCLICommon/`
-  - shared CLI parsing, request building, usage text, and one-shot execution wiring
+  - `CLIParser.swift`, `CLIUsage.swift`, `CLICommandRunner.swift`: shared CLI behavior
+  - `BatchManifest.swift`, `JobInvocationParser.swift`: canonical staged batch normalization
+  - `MarkdownCommandExtractor.swift`, `ShellWordsLexer.swift`: parse-only fenced-command ingestion
 - `Sources/ZImageServeCore/`
-  - local socket transport and serial daemon coordination
+  - `ServiceModels.swift`: NDJSON request/event protocol
+  - `SocketConnection.swift`: Unix domain socket transport
+  - `StagingService.swift`: serial queue, resident-worker reuse, status/cancel/shutdown coordination
 - `Sources/ZImage/Pipeline/`
   - `ZImagePipeline.swift`: text-to-image pipeline
   - `ZImageControlPipeline.swift`: ControlNet and inpainting pipeline
@@ -145,6 +156,12 @@ Serving-specific note:
 - the staging daemon keeps one resident worker profile by default
 - the control pipeline can now warm model, denoiser, and decoder state ahead of the first request
 - adaptive staged serving keeps that worker warm until the profile changes, idle eviction fires, or low-memory fallback evicts it
+
+Operational serving note:
+
+- `status` snapshots the active job id, queued job ids, and resident worker profile
+- `cancel` can signal the active task or remove a queued submission before it starts
+- `shutdown` is deliberately idle-only and flips the daemon into a non-accepting state before the listening socket closes
 
 ## Current Control-Memory Policy
 

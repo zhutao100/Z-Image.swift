@@ -15,6 +15,7 @@ final class ServeEndToEndTests: XCTestCase {
     try super.setUpWithError()
     try requireE2ETestsEnabled()
     let serveURL = try resolveSwiftPMExecutable(named: "ZImageServe", for: type(of: self))
+    try ensureMLXMetalLibraryAdjacent(to: serveURL)
     servePath = serveURL.path
   }
 
@@ -45,31 +46,126 @@ final class ServeEndToEndTests: XCTestCase {
 
     let socketURL = FileManager.default.temporaryDirectory
       .appendingPathComponent("zimage-serve-\(UUID().uuidString).sock")
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: try requireServePath())
-    process.arguments = ["serve", "--socket", socketURL.path]
-    process.currentDirectoryURL = Self.projectRoot
-    process.standardOutput = Pipe()
-    process.standardError = Pipe()
-
-    try process.run()
+    let process = try startDaemon(socketURL: socketURL)
     defer {
-      if process.isRunning {
-        process.terminate()
-        process.waitUntilExit()
-      }
-      try? FileManager.default.removeItem(at: socketURL)
+      stopDaemon(process, socketURL: socketURL)
     }
+
+    XCTAssertTrue(FileManager.default.fileExists(atPath: socketURL.path))
+  }
+
+  func testStatusCommandReportsIdleDaemon() async throws {
+    try skipIfNoServe()
+
+    let socketURL = makeSocketURL()
+    let process = try startDaemon(socketURL: socketURL)
+    defer {
+      stopDaemon(process, socketURL: socketURL)
+    }
+
+    let (stdout, stderr, exitCode) = try await runServe(["--socket", socketURL.path, "status"])
+    let output = stdout + stderr
+
+    XCTAssertEqual(exitCode, 0)
+    XCTAssertTrue(output.contains("Socket: \(socketURL.path)"))
+    XCTAssertTrue(output.contains("Executing: no"))
+    XCTAssertTrue(output.contains("Resident worker: none"))
+  }
+
+  func testShutdownCommandStopsIdleDaemon() async throws {
+    try skipIfNoServe()
+
+    let socketURL = makeSocketURL()
+    let process = try startDaemon(socketURL: socketURL)
+
+    let (stdout, stderr, exitCode) = try await runServe(["--socket", socketURL.path, "shutdown"])
+    let output = stdout + stderr
+
+    XCTAssertEqual(exitCode, 0)
+    XCTAssertTrue(output.contains("Shutdown acknowledged"))
 
     let deadline = Date().addingTimeInterval(10)
-    while Date() < deadline {
-      if FileManager.default.fileExists(atPath: socketURL.path) {
-        return
-      }
-      Thread.sleep(forTimeInterval: 0.1)
+    while process.isRunning && Date() < deadline {
+      try await Task.sleep(nanoseconds: 100_000_000)
     }
 
-    XCTFail("Serve daemon did not create socket at \(socketURL.path)")
+    XCTAssertFalse(process.isRunning, "Daemon should exit after an idle shutdown request")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: socketURL.path))
+  }
+
+  func testBatchCommandSubmitsStructuredManifest() async throws {
+    try skipIfNoServe()
+
+    let socketURL = makeSocketURL()
+    let process = try startDaemon(socketURL: socketURL)
+    defer {
+      stopDaemon(process, socketURL: socketURL)
+    }
+
+    let tempDirectory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+    let missingModelPath = tempDirectory.appendingPathComponent("missing-model").path
+    let outputPath = tempDirectory.appendingPathComponent("batch.png").path
+    let manifestURL = tempDirectory.appendingPathComponent("jobs.json")
+    try """
+      {
+        "version": 1,
+        "jobs": [
+          {
+            "id": "batch-1",
+            "kind": "text",
+            "prompt": "a mountain lake",
+            "model": "\(missingModelPath)",
+            "outputPath": "\(outputPath)"
+          }
+        ]
+      }
+      """.write(to: manifestURL, atomically: true, encoding: .utf8)
+
+    let (stdout, stderr, exitCode) = try await runServe(
+      ["--socket", socketURL.path, "batch", manifestURL.path],
+      timeout: 120
+    )
+    let output = stdout + stderr
+
+    XCTAssertNotEqual(exitCode, 0)
+    XCTAssertTrue(output.contains("batch-1"))
+    XCTAssertTrue(output.contains("failed staged job"))
+    XCTAssertTrue(process.isRunning)
+  }
+
+  func testMarkdownCommandSubmitsFencedInvocation() async throws {
+    try skipIfNoServe()
+
+    let socketURL = makeSocketURL()
+    let process = try startDaemon(socketURL: socketURL)
+    defer {
+      stopDaemon(process, socketURL: socketURL)
+    }
+
+    let tempDirectory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+    let missingModelPath = tempDirectory.appendingPathComponent("missing-model").path
+    let outputPath = tempDirectory.appendingPathComponent("markdown.png").path
+    let markdownURL = tempDirectory.appendingPathComponent("prompts.md")
+    try """
+      ```bash
+      ZImageServe --prompt "a forest path" --model \(missingModelPath) --output \(outputPath)
+      ```
+      """.write(to: markdownURL, atomically: true, encoding: .utf8)
+
+    let (stdout, stderr, exitCode) = try await runServe(
+      ["--socket", socketURL.path, "markdown", markdownURL.path],
+      timeout: 120
+    )
+    let output = stdout + stderr
+
+    XCTAssertNotEqual(exitCode, 0)
+    XCTAssertTrue(output.contains("markdown-1"))
+    XCTAssertTrue(output.contains("failed staged job"))
+    XCTAssertTrue(process.isRunning)
   }
 
   private func runServe(_ arguments: [String], timeout: TimeInterval = 60) async throws -> (
@@ -100,6 +196,51 @@ final class ServeEndToEndTests: XCTestCase {
     let stdout = String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     return (stdout, stderr, process.terminationStatus)
+  }
+
+  private func makeSocketURL() -> URL {
+    FileManager.default.temporaryDirectory
+      .appendingPathComponent("zimage-serve-\(UUID().uuidString).sock")
+  }
+
+  private func makeTemporaryDirectory() throws -> URL {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("zimage-serve-tests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory
+  }
+
+  private func startDaemon(socketURL: URL) throws -> Process {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: try requireServePath())
+    process.arguments = ["serve", "--socket", socketURL.path]
+    process.currentDirectoryURL = Self.projectRoot
+    process.standardOutput = Pipe()
+    process.standardError = Pipe()
+
+    try process.run()
+    try waitForSocket(at: socketURL)
+    return process
+  }
+
+  private func stopDaemon(_ process: Process, socketURL: URL) {
+    if process.isRunning {
+      process.terminate()
+      process.waitUntilExit()
+    }
+    try? FileManager.default.removeItem(at: socketURL)
+  }
+
+  private func waitForSocket(at socketURL: URL, timeout: TimeInterval = 10) throws {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if FileManager.default.fileExists(atPath: socketURL.path) {
+        return
+      }
+      Thread.sleep(forTimeInterval: 0.1)
+    }
+
+    throw ServeTestError.timeout
   }
 
   private func skipIfNoServe() throws {

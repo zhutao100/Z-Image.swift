@@ -47,36 +47,85 @@ enum ZImageServe {
       let daemon = StagingServiceDaemon(options: options, logger: logger)
       try daemon.run()
     case .submit(let socketPath, let job):
-      let client = ServiceClient(socketPath: socketPath)
-      let renderer = makeClientRenderer(for: job)
-      defer {
-        renderer.finish()
-      }
-
-      try client.submit(job: job) { event in
-        switch event.type {
-        case .accepted:
-          if let queuePosition = event.queuePosition, queuePosition > 0, let jobID = event.jobID {
-            logger.info("Queued job \(jobID) at position \(queuePosition)")
-          }
-        case .progress:
-          if let progress = event.progress {
-            renderer.report(progress)
-          }
-        case .completed:
-          if let outputPath = event.outputPath {
-            logger.info("Output saved to: \(outputPath)")
-          }
-        case .failed:
-          throw CLIError(message: event.message ?? "Service request failed", usage: nil)
-        }
-      }
+      try submitJob(BatchSubmission(jobID: UUID().uuidString, job: job), socketPath: socketPath)
+    case .status(let socketPath):
+      let snapshot = try ServiceClient(socketPath: socketPath).status()
+      print(renderStatus(snapshot))
+    case .cancel(let socketPath, let jobID):
+      let event = try ServiceClient(socketPath: socketPath).cancel(jobID: jobID)
+      logger.info("\(event.message ?? "Cancelled \(jobID)")")
+    case .shutdown(let socketPath):
+      let event = try ServiceClient(socketPath: socketPath).shutdown()
+      logger.info("\(event.message ?? "Shutdown acknowledged")")
+    case .batch(let socketPath, let manifestPath):
+      let manifest = try BatchManifest.load(from: manifestPath)
+      try submitBatch(manifest.submissions(), socketPath: socketPath, sourceLabel: manifestPath)
+    case .markdown(let socketPath, let markdownPath):
+      let submissions = try MarkdownCommandExtractor.submissions(fromPath: markdownPath)
+      try submitBatch(submissions, socketPath: socketPath, sourceLabel: markdownPath)
     case .quantize(let options):
       logMetalDevice()
       try CLICommandRunner.runQuantize(options)
     case .quantizeControlnet(let options):
       logMetalDevice()
       try CLICommandRunner.runQuantizeControlnet(options)
+    }
+  }
+
+  private static func submitBatch(_ submissions: [BatchSubmission], socketPath: String?, sourceLabel: String) throws {
+    let total = submissions.count
+    var failures: [String] = []
+
+    for (index, submission) in submissions.enumerated() {
+      logger.info("Submitting \(submission.jobID) (\(index + 1)/\(total)) from \(sourceLabel)")
+      do {
+        try submitJob(submission, socketPath: socketPath)
+      } catch {
+        let message = CLIErrors.describe(error)
+        failures.append("\(submission.jobID): \(message)")
+        logger.error("\(message)")
+      }
+    }
+
+    guard failures.isEmpty else {
+      throw CLIError(
+        message: "Completed with \(failures.count) failed staged job(s): \(failures.joined(separator: "; "))"
+      )
+    }
+  }
+
+  private static func submitJob(_ submission: BatchSubmission, socketPath: String?) throws {
+    let client = ServiceClient(socketPath: socketPath)
+    let renderer = makeClientRenderer(for: submission.job)
+    defer {
+      renderer.finish()
+    }
+
+    try client.submit(job: submission.job, jobID: submission.jobID) { event in
+      switch event.type {
+      case .accepted:
+        if let jobID = event.jobID {
+          if let queuePosition = event.queuePosition, queuePosition > 0 {
+            logger.info("Queued job \(jobID) at position \(queuePosition)")
+          } else {
+            logger.info("Accepted job \(jobID)")
+          }
+        }
+      case .progress:
+        if let progress = event.progress {
+          renderer.report(progress)
+        }
+      case .completed:
+        if let outputPath = event.outputPath {
+          logger.info("Output saved to: \(outputPath)")
+        }
+      case .cancelled:
+        throw CLIError(message: event.message ?? "Service request was cancelled")
+      case .failed:
+        throw CLIError(message: event.message ?? "Service request failed")
+      case .status, .shutdownAcknowledged:
+        break
+      }
     }
   }
 
@@ -116,6 +165,33 @@ enum ZImageServe {
       totalSteps = preset.steps
     }
     return TerminalProgressRenderer(noProgress: noProgress, totalSteps: totalSteps)
+  }
+
+  private static func renderStatus(_ snapshot: ServiceStatusSnapshot) -> String {
+    var lines = [
+      "Socket: \(snapshot.socketPath)",
+      "Residency policy: \(snapshot.residencyPolicy.rawValue)",
+      "Idle timeout: \(Int(snapshot.idleTimeoutSeconds.rounded()))s",
+      "Executing: \(snapshot.isExecuting ? "yes" : "no")",
+      "Shutting down: \(snapshot.isShuttingDown ? "yes" : "no")",
+      "Active job: \(snapshot.activeJobID ?? "none")",
+    ]
+
+    if snapshot.queuedJobIDs.isEmpty {
+      lines.append("Queued jobs: none")
+    } else {
+      lines.append("Queued jobs: \(snapshot.queuedJobIDs.joined(separator: ", "))")
+    }
+
+    if let worker = snapshot.residentWorker {
+      lines.append(
+        "Resident worker: \(worker.kind) model=\(worker.model ?? ZImageRepository.id) residency=\(worker.residencyPolicy.rawValue)"
+      )
+    } else {
+      lines.append("Resident worker: none")
+    }
+
+    return lines.joined(separator: "\n")
   }
 }
 

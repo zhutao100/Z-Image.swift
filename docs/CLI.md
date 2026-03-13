@@ -35,6 +35,11 @@ If Xcode prompts about the MLX shader-preparation package plugin, allow it. For 
 - `ZImageCLI quantize`: quantize base-model weights
 - `ZImageCLI quantize-controlnet`: quantize ControlNet weights
 - `ZImageServe serve`: start the local staging daemon
+- `ZImageServe status`: inspect the daemon, active job, queue, and resident worker
+- `ZImageServe cancel <job-id>`: cancel an active or queued staged job
+- `ZImageServe shutdown`: stop the daemon when it is idle
+- `ZImageServe batch <jobs.json>`: submit a structured JSON batch manifest
+- `ZImageServe markdown <prompts.md>`: submit fenced shell invocations from markdown
 - `ZImageServe`: submit text-to-image generation to the daemon with the same flags as `ZImageCLI`
 - `ZImageServe control`: submit ControlNet generation to the daemon with the same flags as `ZImageCLI control`
 - `ZImageServe quantize` / `quantize-controlnet`: run the same local one-shot quantization paths as `ZImageCLI`
@@ -52,6 +57,7 @@ Use a custom socket path when needed:
 ```bash
 ./ZImageServe serve --socket /tmp/zimage-stage.sock
 ./ZImageServe --socket /tmp/zimage-stage.sock -p "a mountain lake at sunrise" -o lake.png
+./ZImageServe --socket /tmp/zimage-stage.sock status
 ```
 
 The ad hoc generation flags remain the same as `ZImageCLI`; only the executable name changes.
@@ -64,6 +70,53 @@ Useful daemon flags:
 - `--idle-timeout`: evict the resident worker after the specified idle interval
 
 The daemon now keeps a single resident worker profile by default. Matching staged requests reuse that worker until the profile changes, the idle timeout expires, or adaptive low-memory fallback evicts it.
+
+Operational commands:
+
+```bash
+./ZImageServe status
+./ZImageServe cancel <job-id>
+./ZImageServe shutdown
+```
+
+`status` reports the socket path, residency policy, idle timeout, active job id, queued job ids, and resident worker summary. Ad hoc staged submissions now log `Accepted job <uuid>` so that `cancel` has a concrete id to target. `shutdown` is intentionally idle-only; it rejects the request while a job is active or queued.
+
+Structured batch example:
+
+```json
+{
+  "version": 1,
+  "defaults": {
+    "model": "mzbac/z-image-turbo-8bit",
+    "width": 256,
+    "height": 256
+  },
+  "jobs": [
+    {
+      "id": "lake-1",
+      "kind": "text",
+      "prompt": "a mountain lake at sunrise",
+      "outputPath": "out/lake.png"
+    }
+  ]
+}
+```
+
+Submit it with:
+
+```bash
+./ZImageServe batch jobs.json
+```
+
+Markdown example:
+
+````markdown
+```bash
+ZImageServe --prompt "a mountain lake at sunrise" --model mzbac/z-image-turbo-8bit --output out/lake.png
+```
+````
+
+Markdown ingestion is parse-only. Each accepted `bash`, `sh`, or `zsh` fence must reduce to exactly one `ZImageCLI` or `ZImageServe` invocation. Shell control operators, redirects, command substitution, and shell expansion syntax are rejected instead of executed. Batch and markdown submissions continue through the manifest in client order and report an aggregated non-zero failure if any staged job fails.
 
 ## Text-To-Image
 

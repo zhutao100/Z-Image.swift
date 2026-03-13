@@ -47,6 +47,16 @@ public enum CLICompatParser {
       switch first {
       case "serve":
         return try parseServeCommand(Array(finalArgs.dropFirst()), socketPath: socketPath)
+      case "status":
+        return try parseStatusCommand(Array(finalArgs.dropFirst()), socketPath: socketPath)
+      case "cancel":
+        return try parseCancelCommand(Array(finalArgs.dropFirst()), socketPath: socketPath)
+      case "shutdown":
+        return try parseShutdownCommand(Array(finalArgs.dropFirst()), socketPath: socketPath)
+      case "batch":
+        return try parseBatchCommand(Array(finalArgs.dropFirst()), socketPath: socketPath)
+      case "markdown":
+        return try parseMarkdownCommand(Array(finalArgs.dropFirst()), socketPath: socketPath)
       case "quantize":
         return .quantize(try parseQuantizeOptions(Array(finalArgs.dropFirst()), usage: .quantize))
       case "quantize-controlnet":
@@ -110,6 +120,56 @@ public enum CLICompatParser {
         warmMaxSequenceLength: warmMaxSequenceLength,
         idleTimeoutSeconds: idleTimeoutSeconds
       ))
+  }
+
+  private static func parseStatusCommand(_ args: [String], socketPath: String?) throws -> ServeParsedCommand {
+    if args.contains("--help") || args.contains("-h") {
+      return .help(.status)
+    }
+    guard args.isEmpty else {
+      throw CLIError(message: "Unknown status argument: \(args[0])", usage: .status)
+    }
+    return .status(socketPath: socketPath)
+  }
+
+  private static func parseCancelCommand(_ args: [String], socketPath: String?) throws -> ServeParsedCommand {
+    if args.isEmpty || args.contains("--help") || args.contains("-h") {
+      return .help(.cancel)
+    }
+    guard args.count == 1 else {
+      throw CLIError(message: "Expected a single <job-id> argument", usage: .cancel)
+    }
+    return .cancel(socketPath: socketPath, jobID: args[0])
+  }
+
+  private static func parseShutdownCommand(_ args: [String], socketPath: String?) throws -> ServeParsedCommand {
+    if args.contains("--help") || args.contains("-h") {
+      return .help(.shutdown)
+    }
+    guard args.isEmpty else {
+      throw CLIError(message: "Unknown shutdown argument: \(args[0])", usage: .shutdown)
+    }
+    return .shutdown(socketPath: socketPath)
+  }
+
+  private static func parseBatchCommand(_ args: [String], socketPath: String?) throws -> ServeParsedCommand {
+    if args.isEmpty || args.contains("--help") || args.contains("-h") {
+      return .help(.batch)
+    }
+    guard args.count == 1 else {
+      throw CLIError(message: "Expected a single <jobs.json> argument", usage: .batch)
+    }
+    return .batch(socketPath: socketPath, manifestPath: args[0])
+  }
+
+  private static func parseMarkdownCommand(_ args: [String], socketPath: String?) throws -> ServeParsedCommand {
+    if args.isEmpty || args.contains("--help") || args.contains("-h") {
+      return .help(.markdown)
+    }
+    guard args.count == 1 else {
+      throw CLIError(message: "Expected a single <prompts.md> argument", usage: .markdown)
+    }
+    return .markdown(socketPath: socketPath, markdownPath: args[0])
   }
 
   private static func parseTextGeneration(_ args: [String]) throws -> TextGenerationOptions {

@@ -1,6 +1,6 @@
 # Staging CLI Service Plan
 
-Status: active implementation plan
+Status: completed on March 13, 2026
 
 ## Decision
 
@@ -17,6 +17,22 @@ Why:
 1. shared CLI parsing/building plus a local `ZImageServe` daemon/client for ad hoc generation requests
 2. serving residency policy and warm worker reuse with idle eviction and memory-pressure fallback
 3. JSON batch, markdown ingestion, and operational commands
+
+## Completion note
+
+The chosen warm worker daemon shipped as:
+
+- shared CLI parsing and request building in `Sources/ZImageCLICommon/`
+- `ZImageServe` plus the local socket protocol in `Sources/ZImageServe/` and `Sources/ZImageServeCore/`
+- serving residency controls in `Sources/ZImage/Pipeline/RuntimeOptions.swift`
+- JSON batch manifests, markdown fenced-command ingestion, and `status` / `cancel` / `shutdown`
+
+Recorded verification:
+
+- fast coverage for parser, batch JSON, and markdown ingestion
+- staged E2E coverage for daemon lifecycle, batch, markdown, status, and shutdown
+- repeated-request warm-serving probe against cached `mzbac/z-image-turbo-8bit`
+- manual active-job cancel probe against the same cached profile
 
 ## Verification bar
 

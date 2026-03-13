@@ -92,6 +92,43 @@ final class CLICompatParserTests: XCTestCase {
     XCTAssertEqual(options.outputPath, "portrait.png")
   }
 
+  func testServeParserParsesOperationalCommands() throws {
+    let status = try CLICompatParser.parseServe(["--socket", "/tmp/zimage.sock", "status"])
+    guard case .status(let statusSocket) = status else {
+      return XCTFail("Expected status command")
+    }
+    XCTAssertEqual(statusSocket, "/tmp/zimage.sock")
+
+    let cancel = try CLICompatParser.parseServe(["cancel", "job-42"])
+    guard case .cancel(let cancelSocket, let jobID) = cancel else {
+      return XCTFail("Expected cancel command")
+    }
+    XCTAssertNil(cancelSocket)
+    XCTAssertEqual(jobID, "job-42")
+
+    let shutdown = try CLICompatParser.parseServe(["shutdown"])
+    guard case .shutdown(let shutdownSocket) = shutdown else {
+      return XCTFail("Expected shutdown command")
+    }
+    XCTAssertNil(shutdownSocket)
+  }
+
+  func testServeParserParsesBatchAndMarkdownCommands() throws {
+    let batch = try CLICompatParser.parseServe(["batch", "jobs.json"])
+    guard case .batch(let batchSocket, let manifestPath) = batch else {
+      return XCTFail("Expected batch command")
+    }
+    XCTAssertNil(batchSocket)
+    XCTAssertEqual(manifestPath, "jobs.json")
+
+    let markdown = try CLICompatParser.parseServe(["markdown", "prompts.md"])
+    guard case .markdown(let markdownSocket, let markdownPath) = markdown else {
+      return XCTFail("Expected markdown command")
+    }
+    XCTAssertNil(markdownSocket)
+    XCTAssertEqual(markdownPath, "prompts.md")
+  }
+
   func testServiceEnvelopeRoundTripsTextJob() throws {
     let request = ServiceRequestEnvelope(
       type: .submit,
@@ -106,5 +143,18 @@ final class CLICompatParserTests: XCTestCase {
 
     XCTAssertEqual(decoded, request)
     XCTAssertEqual(try decoded.submission?.job.asPayload(), .text(TextGenerationOptions(prompt: "test", outputPath: "out.png")))
+  }
+
+  func testServiceEnvelopeRoundTripsStatusAndCancelPayloads() throws {
+    let statusRequest = ServiceRequestEnvelope(type: .status)
+    let statusData = try JSONEncoder().encode(statusRequest)
+    XCTAssertEqual(try JSONDecoder().decode(ServiceRequestEnvelope.self, from: statusData), statusRequest)
+
+    let cancelRequest = ServiceRequestEnvelope(
+      type: .cancel,
+      cancellation: ServiceCancellationPayload(jobID: "job-9")
+    )
+    let cancelData = try JSONEncoder().encode(cancelRequest)
+    XCTAssertEqual(try JSONDecoder().decode(ServiceRequestEnvelope.self, from: cancelData), cancelRequest)
   }
 }

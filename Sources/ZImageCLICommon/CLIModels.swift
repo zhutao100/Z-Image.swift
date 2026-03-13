@@ -14,6 +14,11 @@ public enum CLIUsageTopic: Sendable, Equatable {
   case quantizeControlnet
   case control
   case serve
+  case status
+  case cancel
+  case shutdown
+  case batch
+  case markdown
 }
 
 public struct CLIError: LocalizedError, Sendable {
@@ -269,6 +274,11 @@ public enum ServeParsedCommand: Sendable, Equatable {
   case help(CLIUsageTopic)
   case serve(ServeOptions)
   case submit(socketPath: String?, job: GenerationJobPayload)
+  case status(socketPath: String?)
+  case cancel(socketPath: String?, jobID: String)
+  case shutdown(socketPath: String?)
+  case batch(socketPath: String?, manifestPath: String)
+  case markdown(socketPath: String?, markdownPath: String)
   case quantize(QuantizeOptions)
   case quantizeControlnet(QuantizeControlnetOptions)
 }

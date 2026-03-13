@@ -16,6 +16,16 @@ public enum CLIUsageFormatter {
       controlUsage(program: program)
     case .serve:
       serveUsage()
+    case .status:
+      statusUsage()
+    case .cancel:
+      cancelUsage()
+    case .shutdown:
+      shutdownUsage()
+    case .batch:
+      batchUsage()
+    case .markdown:
+      markdownUsage()
     }
   }
 
@@ -27,6 +37,11 @@ public enum CLIUsageFormatter {
 
         Usage:
           \(executable) serve [options]
+          \(executable) status [options]
+          \(executable) cancel <job-id> [options]
+          \(executable) shutdown [options]
+          \(executable) batch <jobs.json> [options]
+          \(executable) markdown <prompts.md> [options]
           \(executable) --prompt "text" [generation options]
           \(executable) control --prompt "text" --controlnet-weights <path> [options]
           \(executable) quantize -i <input> -o <output> [options]
@@ -39,6 +54,8 @@ public enum CLIUsageFormatter {
 
         Examples:
           \(executable) serve
+          \(executable) status
+          \(executable) batch jobs.json
           \(executable) -p "a mountain lake at sunrise" -o lake.png
           \(executable) control -p "a dancer" -c pose.png --cw ./controlnet -o dancer.png
       """
@@ -239,6 +256,56 @@ public enum CLIUsageFormatter {
       Submit jobs with the same generation flags as ZImageCLI:
         ZImageServe -p "a mountain lake at sunrise" -o lake.png
         ZImageServe control -p "a dancer" -c pose.png --cw ./controlnet -o dancer.png
+      """
+  }
+
+  public static func statusUsage() -> String {
+    """
+      Query the local staging daemon status.
+
+      Usage: ZImageServe status [options]
+        --socket, -S         Unix domain socket path (default: user cache directory)
+        --help, -h           Show help
+      """
+  }
+
+  public static func cancelUsage() -> String {
+    """
+      Cancel the active or queued staged job.
+
+      Usage: ZImageServe cancel <job-id> [options]
+        --socket, -S         Unix domain socket path (default: user cache directory)
+        --help, -h           Show help
+      """
+  }
+
+  public static func shutdownUsage() -> String {
+    """
+      Stop the local staging daemon when it is idle.
+
+      Usage: ZImageServe shutdown [options]
+        --socket, -S         Unix domain socket path (default: user cache directory)
+        --help, -h           Show help
+      """
+  }
+
+  public static func batchUsage() -> String {
+    """
+      Submit a structured JSON batch manifest to the local staging daemon.
+
+      Usage: ZImageServe batch <jobs.json> [options]
+        --socket, -S         Unix domain socket path (default: user cache directory)
+        --help, -h           Show help
+      """
+  }
+
+  public static func markdownUsage() -> String {
+    """
+      Submit fenced shell commands from a markdown file to the local staging daemon.
+
+      Usage: ZImageServe markdown <prompts.md> [options]
+        --socket, -S         Unix domain socket path (default: user cache directory)
+        --help, -h           Show help
       """
   }
 }

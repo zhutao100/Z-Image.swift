@@ -1,0 +1,46 @@
+import Foundation
+
+public enum GenerationJobInvocationParser {
+  private static let cliPrograms: Set<String> = ["ZImageCLI", "./ZImageCLI"]
+  private static let servePrograms: Set<String> = ["ZImageServe", "./ZImageServe"]
+
+  public static func supportsProgram(_ token: String) -> Bool {
+    cliPrograms.contains(token) || servePrograms.contains(token)
+  }
+
+  public static func parse(tokens: [String], usage: CLIUsageTopic) throws -> GenerationJobPayload {
+    guard !tokens.isEmpty else {
+      throw CLIError(message: "Missing staged generation command", usage: usage)
+    }
+
+    if cliPrograms.contains(tokens[0]) {
+      return try parseCLI(tokens: Array(tokens.dropFirst()), usage: usage)
+    }
+    if servePrograms.contains(tokens[0]) {
+      return try parseServe(tokens: Array(tokens.dropFirst()), usage: usage)
+    }
+    return try parseServe(tokens: tokens, usage: usage)
+  }
+
+  private static func parseCLI(tokens: [String], usage: CLIUsageTopic) throws -> GenerationJobPayload {
+    let command = try CLICompatParser.parseCLI(tokens)
+    switch command {
+    case .generate(let options):
+      return .text(options)
+    case .control(let options):
+      return .control(options)
+    case .help, .quantize, .quantizeControlnet:
+      throw CLIError(message: "Command does not resolve to a generation request", usage: usage)
+    }
+  }
+
+  private static func parseServe(tokens: [String], usage: CLIUsageTopic) throws -> GenerationJobPayload {
+    let command = try CLICompatParser.parseServe(tokens)
+    switch command {
+    case .submit(_, let job):
+      return job
+    case .help, .serve, .status, .cancel, .shutdown, .batch, .markdown, .quantize, .quantizeControlnet:
+      throw CLIError(message: "Command does not resolve to a generation request", usage: usage)
+    }
+  }
+}

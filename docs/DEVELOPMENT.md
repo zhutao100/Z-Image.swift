@@ -65,6 +65,7 @@ ZIMAGE_RUN_INTEGRATION_TESTS=1 swift test --filter ControlNetIntegrationTests
 ZIMAGE_RUN_INTEGRATION_TESTS=1 swift test --filter LoRAIntegrationTests
 ZIMAGE_RUN_INTEGRATION_TESTS=1 swift test --filter PerformanceTests
 ZIMAGE_RUN_E2E_TESTS=1 swift test --filter CLIEndToEndTests
+ZIMAGE_RUN_E2E_TESTS=1 swift test --filter ServeEndToEndTests
 ```
 
 `ZImageE2ETests` use the `ZImageCLI` executable built by the same SwiftPM stack as `swift test`. They do not invoke `xcodebuild` internally.
@@ -211,6 +212,20 @@ Current measured status from the March 13, 2026 validation run on the local cach
   - `Loading transformer`: `1`
   - `Model already loaded, skipping load`: `2`
   - `Reusing resident text worker`: `2`
+
+Also keep the staging-daemon lifecycle suite in the loop:
+
+```bash
+ZIMAGE_RUN_E2E_TESTS=1 swift test --filter ServeEndToEndTests
+```
+
+Current measured status from the March 13, 2026 operational validation run:
+
+- `ServeEndToEndTests`: `7` tests passed in about `2.1s`
+- manual cancel probe against cached `mzbac/z-image-turbo-8bit`:
+  - `status` reported the active job id while the request was running
+  - `cancel` acknowledged the active job immediately
+  - the submitting client exited non-zero after receiving the cancellation event
 
 ### Numerical-Parity Work
 

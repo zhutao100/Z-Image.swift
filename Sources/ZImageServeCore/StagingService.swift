@@ -49,6 +49,41 @@ private struct ResidentWorkerState: Sendable {
   var lastUsedAt: Date
 }
 
+private final class ServerControl: @unchecked Sendable {
+  private let lock = NSLock()
+  private var serverFD: Int32?
+
+  init(serverFD: Int32) {
+    self.serverFD = serverFD
+  }
+
+  func shutdown() {
+    lock.lock()
+    defer { lock.unlock() }
+
+    guard let serverFD else { return }
+    self.serverFD = nil
+    close(serverFD)
+  }
+}
+
+private enum QueueGate {
+  case execute
+  case cancelled
+}
+
+private struct QueuedSubmission {
+  var jobID: String
+  var eventSink: @Sendable (ServiceEventEnvelope) throws -> Void
+  var continuation: CheckedContinuation<QueueGate, Never>
+}
+
+private enum CancelDisposition {
+  case active
+  case queued
+  case notFound
+}
+
 public final class ServiceClient {
   private let socketPath: String
   private let decoder = JSONDecoder()
@@ -68,6 +103,78 @@ public final class ServiceClient {
       type: .submit,
       submission: ServiceSubmissionPayload(jobID: jobID, job: CodableGenerationJob.from(job))
     )
+    try send(
+      request,
+      over: connection,
+      terminalTypes: [.completed, .failed, .cancelled],
+      eventHandler: eventHandler
+    )
+  }
+
+  public func status() throws -> ServiceStatusSnapshot {
+    let connection = try UnixDomainSocket.connect(path: socketPath)
+    let request = ServiceRequestEnvelope(type: .status)
+    var snapshot: ServiceStatusSnapshot?
+    try send(request, over: connection, terminalTypes: [.status, .failed]) { event in
+      switch event.type {
+      case .status:
+        snapshot = event.status
+      case .failed:
+        throw CLIError(message: event.message ?? "Status request failed")
+      default:
+        break
+      }
+    }
+
+    guard let snapshot else {
+      throw ServiceTransportError.invalidMessage("Service status response did not include a snapshot")
+    }
+    return snapshot
+  }
+
+  public func cancel(jobID: String) throws -> ServiceEventEnvelope {
+    let connection = try UnixDomainSocket.connect(path: socketPath)
+    let request = ServiceRequestEnvelope(
+      type: .cancel,
+      cancellation: ServiceCancellationPayload(jobID: jobID)
+    )
+    var terminalEvent: ServiceEventEnvelope?
+    try send(request, over: connection, terminalTypes: [.cancelled, .failed]) { event in
+      terminalEvent = event
+      if event.type == .failed {
+        throw CLIError(message: event.message ?? "Cancel request failed")
+      }
+    }
+
+    guard let terminalEvent else {
+      throw ServiceTransportError.invalidMessage("Service cancel response was incomplete")
+    }
+    return terminalEvent
+  }
+
+  public func shutdown() throws -> ServiceEventEnvelope {
+    let connection = try UnixDomainSocket.connect(path: socketPath)
+    let request = ServiceRequestEnvelope(type: .shutdown)
+    var terminalEvent: ServiceEventEnvelope?
+    try send(request, over: connection, terminalTypes: [.shutdownAcknowledged, .failed]) { event in
+      terminalEvent = event
+      if event.type == .failed {
+        throw CLIError(message: event.message ?? "Shutdown request failed")
+      }
+    }
+
+    guard let terminalEvent else {
+      throw ServiceTransportError.invalidMessage("Service shutdown response was incomplete")
+    }
+    return terminalEvent
+  }
+
+  private func send(
+    _ request: ServiceRequestEnvelope,
+    over connection: SocketConnection,
+    terminalTypes: Set<ServiceEventType>,
+    eventHandler: (ServiceEventEnvelope) throws -> Void
+  ) throws {
     let payload = try encoder.encode(request)
     guard let line = String(data: payload, encoding: .utf8) else {
       throw ServiceTransportError.invalidMessage("Failed to encode service request")
@@ -77,10 +184,12 @@ public final class ServiceClient {
     while let responseLine = try connection.readLine() {
       let event = try decoder.decode(ServiceEventEnvelope.self, from: Data(responseLine.utf8))
       try eventHandler(event)
-      if event.type == .completed || event.type == .failed {
+      if terminalTypes.contains(event.type) {
         return
       }
     }
+
+    throw ServiceTransportError.invalidMessage("Service closed the connection before sending a terminal event")
   }
 }
 
@@ -99,10 +208,11 @@ public final class StagingServiceDaemon {
 
   public func run() throws {
     let serverFD = try UnixDomainSocket.makeServerSocket(path: socketPath)
+    let serverControl = ServerControl(serverFD: serverFD)
     let idleTimer = makeIdleTimer()
     defer {
       idleTimer.cancel()
-      close(serverFD)
+      serverControl.shutdown()
       unlink(socketPath)
     }
 
@@ -127,12 +237,23 @@ public final class StagingServiceDaemon {
 
       let coordinator = self.coordinator
       let logger = self.logger
-      do {
-        try waitForAsync {
-          try await Self.handleConnection(connection, coordinator: coordinator, logger: logger)
+      let socketPath = self.socketPath
+      DispatchQueue.global(qos: .userInitiated).async {
+        do {
+          try waitForAsync {
+            try await Self.handleConnection(
+              connection,
+              socketPath: socketPath,
+              coordinator: coordinator,
+              logger: logger,
+              shutdownHandler: {
+                serverControl.shutdown()
+              }
+            )
+          }
+        } catch {
+          logger.error("\(CLIErrors.describe(error))")
         }
-      } catch {
-        logger.error("\(CLIErrors.describe(error))")
       }
     }
   }
@@ -152,11 +273,20 @@ public final class StagingServiceDaemon {
 
   private static func handleConnection(
     _ connection: SocketConnection,
+    socketPath: String,
     coordinator: SerialServiceCoordinator,
-    logger: Logger
+    logger: Logger,
+    shutdownHandler: @escaping @Sendable () -> Void
   ) async throws {
     let decoder = JSONDecoder()
     let encoder = JSONEncoder()
+    let sendEvent: @Sendable (ServiceEventEnvelope) throws -> Void = { event in
+      let data = try encoder.encode(event)
+      guard let line = String(data: data, encoding: .utf8) else {
+        throw ServiceTransportError.invalidMessage("Failed to encode event payload")
+      }
+      try connection.writeLine(line)
+    }
 
     guard let line = try connection.readLine() else {
       throw ServiceTransportError.invalidMessage("Missing request payload")
@@ -167,12 +297,52 @@ public final class StagingServiceDaemon {
       guard let submission = request.submission else {
         throw ServiceTransportError.invalidMessage("Missing submission payload")
       }
-      try await coordinator.submit(submission) { event in
-        let data = try encoder.encode(event)
-        guard let line = String(data: data, encoding: .utf8) else {
-          throw ServiceTransportError.invalidMessage("Failed to encode event payload")
-        }
-        try connection.writeLine(line)
+      try await coordinator.submit(submission, eventSink: sendEvent)
+    case .status:
+      let status = await coordinator.status(socketPath: socketPath)
+      try sendEvent(.init(type: .status, status: status))
+    case .cancel:
+      guard let cancellation = request.cancellation else {
+        throw ServiceTransportError.invalidMessage("Missing cancellation payload")
+      }
+      let disposition = await coordinator.cancel(jobID: cancellation.jobID)
+      switch disposition {
+      case .active:
+        try sendEvent(
+          .init(
+            type: .cancelled,
+            jobID: cancellation.jobID,
+            message: "Cancellation requested for active job \(cancellation.jobID)"
+          ))
+      case .queued:
+        try sendEvent(
+          .init(
+            type: .cancelled,
+            jobID: cancellation.jobID,
+            message: "Cancelled queued job \(cancellation.jobID)"
+          ))
+      case .notFound:
+        try sendEvent(
+          .init(
+            type: .failed,
+            jobID: cancellation.jobID,
+            message: "No active or queued job matched \(cancellation.jobID)"
+          ))
+      }
+    case .shutdown:
+      if await coordinator.requestShutdown() {
+        try sendEvent(
+          .init(
+            type: .shutdownAcknowledged,
+            message: "Shutdown acknowledged for \(socketPath)"
+          ))
+        shutdownHandler()
+      } else {
+        try sendEvent(
+          .init(
+            type: .failed,
+            message: "Cannot shutdown while a job is active or queued"
+          ))
       }
     }
   }
@@ -202,7 +372,10 @@ actor SerialServiceCoordinator {
   private let logger: Logger
   private var isBusy = false
   private var isExecuting = false
-  private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var isShuttingDown = false
+  private var activeJobID: String?
+  private var activeJobTask: Task<URL, Error>?
+  private var waiters: [QueuedSubmission] = []
   private var residentWorker: ResidentWorkerState?
 
   init(options: ServeOptions, logger: Logger) {
@@ -221,51 +394,123 @@ actor SerialServiceCoordinator {
     _ submission: ServiceSubmissionPayload,
     eventSink: @escaping @Sendable (ServiceEventEnvelope) throws -> Void
   ) async throws {
+    if isShuttingDown {
+      try eventSink(
+        .init(
+          type: .failed,
+          jobID: submission.jobID,
+          message: "Service is shutting down and not accepting new jobs"
+        ))
+      return
+    }
+
     let queuePosition = isBusy ? waiters.count + 1 : 0
     try eventSink(.init(type: .accepted, jobID: submission.jobID, queuePosition: queuePosition))
 
     if isBusy {
-      await withCheckedContinuation { continuation in
-        waiters.append(continuation)
+      let gate = await withCheckedContinuation { (continuation: CheckedContinuation<QueueGate, Never>) in
+        waiters.append(.init(jobID: submission.jobID, eventSink: eventSink, continuation: continuation))
       }
+      guard gate == .execute else { return }
     } else {
       isBusy = true
     }
 
     isExecuting = true
+    activeJobID = submission.jobID
     defer {
       isExecuting = false
+      activeJobID = nil
+      activeJobTask = nil
       if waiters.isEmpty {
         isBusy = false
       } else {
         let next = waiters.removeFirst()
-        next.resume()
+        next.continuation.resume(returning: .execute)
       }
     }
 
     let job = try submission.job.asPayload()
     let profile = profile(for: job)
     let worker = try await ensureWorker(for: profile)
-
-    do {
-      let outputURL: URL
+    let task = Task<URL, Error> {
       switch (worker, job) {
       case (.text(let worker), .text(let options)):
-        outputURL = try await worker.execute(options) { update in
+        return try await worker.execute(options) { update in
           try? eventSink(.init(type: .progress, jobID: submission.jobID, progress: update))
         }
       case (.control(let worker), .control(let options)):
-        outputURL = try await worker.execute(options) { update in
+        return try await worker.execute(options) { update in
           try? eventSink(.init(type: .progress, jobID: submission.jobID, progress: update))
         }
       default:
         throw ServiceTransportError.invalidMessage("Worker profile does not match submitted job")
       }
+    }
+    activeJobTask = task
+
+    do {
+      let outputURL = try await task.value
       residentWorker?.lastUsedAt = Date()
       try eventSink(.init(type: .completed, jobID: submission.jobID, outputPath: outputURL.path))
+    } catch is CancellationError {
+      try eventSink(.init(type: .cancelled, jobID: submission.jobID, message: "Job cancelled"))
     } catch {
       try eventSink(.init(type: .failed, jobID: submission.jobID, message: CLIErrors.describe(error)))
     }
+  }
+
+  func status(socketPath: String) -> ServiceStatusSnapshot {
+    ServiceStatusSnapshot(
+      socketPath: socketPath,
+      residencyPolicy: options.residencyPolicy,
+      idleTimeoutSeconds: options.idleTimeoutSeconds,
+      isExecuting: isExecuting,
+      isShuttingDown: isShuttingDown,
+      activeJobID: activeJobID,
+      queuedJobIDs: waiters.map(\.jobID),
+      residentWorker: residentWorker.map {
+        ServiceWorkerSnapshot(
+          kind: $0.profile.kind.rawValue,
+          model: $0.profile.model,
+          weightsVariant: $0.profile.weightsVariant,
+          controlnetWeights: $0.profile.controlnetWeights,
+          controlnetFile: $0.profile.controlnetFile,
+          maxSequenceLength: $0.profile.maxSequenceLength,
+          residencyPolicy: $0.profile.residencyPolicy,
+          lastUsedAt: $0.lastUsedAt
+        )
+      }
+    )
+  }
+
+  fileprivate func cancel(jobID: String) -> CancelDisposition {
+    if activeJobID == jobID {
+      activeJobTask?.cancel()
+      return .active
+    }
+
+    guard let index = waiters.firstIndex(where: { $0.jobID == jobID }) else {
+      return .notFound
+    }
+
+    let queuedSubmission = waiters.remove(at: index)
+    do {
+      try queuedSubmission.eventSink(.init(type: .cancelled, jobID: jobID, message: "Job cancelled while queued"))
+    } catch {
+      logger.warning("Failed to notify queued job \(jobID) about cancellation: \(CLIErrors.describe(error))")
+    }
+    queuedSubmission.continuation.resume(returning: .cancelled)
+    if !isExecuting && waiters.isEmpty {
+      isBusy = false
+    }
+    return .queued
+  }
+
+  func requestShutdown() -> Bool {
+    guard !isExecuting, waiters.isEmpty else { return false }
+    isShuttingDown = true
+    return true
   }
 
   func evictIdleWorkerIfNeeded(now: Date) async {

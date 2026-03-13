@@ -151,7 +151,18 @@ Staging daemon:
 ```bash
 ./ZImageServe serve --residency-policy adaptive --warm-model mzbac/z-image-turbo-8bit
 ./ZImageServe -p "a neon-lit alley in the rain" -o staged.png
+./ZImageServe status
+./ZImageServe shutdown
 ```
+
+Structured staged submission:
+
+```bash
+./ZImageServe batch jobs.json
+./ZImageServe markdown prompts.md
+```
+
+`ZImageServe` reuses the normal generation flags for ad hoc requests, prints the accepted job id for cancellation, exposes `status`, `cancel`, and `shutdown` for daemon operations, and keeps JSON/markdown ingestion on the client side so the socket protocol stays canonical. Markdown ingestion accepts single fenced `bash`/`sh`/`zsh` invocations for `ZImageCLI` or `ZImageServe` and rejects shell control operators or expansion syntax instead of executing them.
 
 `ZImageCLI control` also accepts `--lora`, `--lora-scale`, `--enhance`, and `--enhance-max-tokens`.
 
