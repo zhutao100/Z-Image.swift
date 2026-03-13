@@ -14,9 +14,9 @@ Status: active on March 13, 2026
   - the current Z-Image Fun Base ControlNet support target is the full Union 2.1 file only
   - current upstream Lite and Tile filenames for the Z-Image Fun Base family are rejected explicitly
   - selected ControlNet weights are validated against the current full-layout contract (`15` layer blocks, `2` refiner blocks, `control_in_dim = 33`)
-- Phase 3 remains optional:
-  - adapter-aware preset warnings
-  - broader Lite/Tile generalization
+- Phase 3 partially complete:
+  - the CLI now emits a known-adapter warning for the validated Distill `8-Steps-2603` file with the documented `8 / 1.0 / 0.8` recipe
+  - broader Lite/Tile generalization remains deferred
 
 ## Scope
 

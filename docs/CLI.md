@@ -167,7 +167,7 @@ Explicit flags still override those values field by field. Example:
 
 Important nuance: preset lookup now covers known ids, inspectable local or cached snapshots, and common Z-Image-style aliases. Completely unrecognized models still keep the Turbo-compatible preset unless you set the relevant flags explicitly.
 
-LoRA nuance: third-party adapter cards can recommend sampling settings that differ from the base-model defaults. The CLI does not auto-parse adapter README files into presets, so keep `--steps` and `--guidance` explicit when an adapter card calls out values.
+LoRA nuance: third-party adapter cards can recommend sampling settings that differ from the base-model defaults. The CLI does not auto-parse adapter README files into presets, but it now emits a known-adapter warning for the validated `Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors` path with the recommended `--steps 8 --guidance 1.0 --lora-scale 0.8` recipe.
 
 ## Model Specs (`--model`)
 

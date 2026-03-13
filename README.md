@@ -137,6 +137,7 @@ Text-to-image LoRA:
 ```
 
 When a LoRA repo or local directory contains multiple `.safetensors` files, `--lora-file` is required so the adapter selection stays deterministic.
+For the validated Distill adapter path `Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors`, the CLI now warns toward the upstream `--steps 8 --guidance 1.0 --lora-scale 0.8` recipe without overriding your flags automatically.
 
 ControlNet:
 

@@ -261,6 +261,7 @@ public enum CLICommandRunner {
       loraConfig: loraConfig,
       steps: options.steps,
       guidance: options.guidance,
+      loraScale: options.loraScale,
       preset: preset,
       logger: logger
     )
@@ -325,6 +326,7 @@ public enum CLICommandRunner {
       loraConfig: loraConfig,
       steps: options.steps,
       guidance: options.guidance,
+      loraScale: options.loraScale,
       preset: preset,
       logger: logger
     )
@@ -410,16 +412,84 @@ public enum CLICommandRunner {
     return .huggingFace(path, filename: filename, scale: scale)
   }
 
+  private struct KnownLoRARecommendation {
+    let modelId: String
+    let filename: String
+    let steps: Int
+    let guidance: Float
+    let scale: Float
+  }
+
+  static func loraSamplingWarning(
+    loraConfig: LoRAConfiguration?,
+    steps: Int?,
+    guidance: Float?,
+    loraScale: Float,
+    preset: ZImagePreset
+  ) -> String? {
+    guard let loraConfig else { return nil }
+
+    if let recommendation = knownLoRARecommendation(for: loraConfig) {
+      let usesRecommendedSteps = steps == recommendation.steps
+      let usesRecommendedGuidance = guidance == recommendation.guidance
+      let usesRecommendedScale = abs(loraScale - recommendation.scale) < 0.0001
+
+      if usesRecommendedSteps && usesRecommendedGuidance && usesRecommendedScale {
+        return nil
+      }
+
+      return
+        "Known adapter guidance for \(recommendation.modelId) (\(recommendation.filename)) is --steps \(recommendation.steps) --guidance \(recommendation.guidance) --lora-scale \(recommendation.scale). The CLI does not override those values automatically."
+    }
+
+    if steps == nil || guidance == nil {
+      return
+        "Using model defaults with LoRA (steps=\(preset.steps), guidance=\(preset.guidanceScale)). Adapter-specific sampling can differ; set --steps and --guidance explicitly when the adapter card recommends values."
+    }
+
+    return nil
+  }
+
   private static func warnIfLoRAUsesModelDefaults(
     loraConfig: LoRAConfiguration?,
     steps: Int?,
     guidance: Float?,
+    loraScale: Float,
     preset: ZImagePreset,
     logger: Logger
   ) {
-    guard loraConfig != nil, steps == nil || guidance == nil else { return }
-    logger.warning(
-      "Using model defaults with LoRA (steps=\(preset.steps), guidance=\(preset.guidanceScale)). Adapter-specific sampling can differ; set --steps and --guidance explicitly when the adapter card recommends values."
+    guard
+      let message = loraSamplingWarning(
+        loraConfig: loraConfig,
+        steps: steps,
+        guidance: guidance,
+        loraScale: loraScale,
+        preset: preset
+      )
+    else { return }
+
+    logger.warning("\(message)")
+  }
+
+  private static func knownLoRARecommendation(for loraConfig: LoRAConfiguration) -> KnownLoRARecommendation? {
+    let targetModelId = "alibaba-pai/Z-Image-Fun-Lora-Distill"
+    let targetFilename = "Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors"
+
+    switch loraConfig.source {
+    case .huggingFace(let modelId, let filename):
+      guard modelId.caseInsensitiveCompare(targetModelId) == .orderedSame else { return nil }
+      guard let filename, filename == targetFilename else { return nil }
+
+    case .local(let url):
+      guard url.lastPathComponent == targetFilename else { return nil }
+    }
+
+    return KnownLoRARecommendation(
+      modelId: targetModelId,
+      filename: targetFilename,
+      steps: 8,
+      guidance: 1.0,
+      scale: 0.8
     )
   }
 
