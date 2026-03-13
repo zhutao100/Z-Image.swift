@@ -83,6 +83,7 @@ public enum CLIUsageFormatter {
         --cache-limit          GPU memory cache limit in MB (default: unlimited)
         --max-sequence-length  Maximum sequence length for text encoding (default: 512)
         --lora, -l             LoRA weights path or HuggingFace ID
+        --lora-file            Specific safetensors filename within a LoRA repo or directory
         --lora-scale           LoRA scale factor (default: 1.0)
         --enhance, -e          Enhance prompt using LLM (requires ~5GB extra VRAM)
         --enhance-max-tokens   Max tokens for prompt enhancement (default: 512)
@@ -192,6 +193,7 @@ public enum CLIUsageFormatter {
         --cache-limit             GPU memory cache limit in MB (default: unlimited)
         --max-sequence-length     Maximum sequence length for text encoding (default: 512)
         --lora, -l                LoRA weights path or HuggingFace ID
+        --lora-file               Specific safetensors filename within a LoRA repo or directory
         --lora-scale              LoRA scale factor (default: 1.0)
         --enhance, -e             Enhance prompt using LLM (requires ~5GB extra VRAM)
         --enhance-max-tokens      Max tokens for prompt enhancement (default: 512)

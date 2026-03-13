@@ -141,7 +141,7 @@ Useful flags:
 - `--force-transformer-override-only`: force a local `.safetensors` to be treated as a transformer override instead of AIO
 - `--cache-limit`: MLX cache limit in MB
 - `--max-sequence-length`: text-encoding token cap, default `512`
-- `--lora/-l`, `--lora-scale`: text-to-image LoRA support
+- `--lora/-l`, `--lora-file`, `--lora-scale`: text-to-image LoRA support
 - `--enhance/-e`, `--enhance-max-tokens`: prompt enhancement through the Qwen text encoder
 - `--no-progress`: disable progress output
 
@@ -197,6 +197,22 @@ Text-to-image LoRA usage:
 ```
 
 `--lora` accepts a local path or a Hugging Face repo id. The same `--lora` and `--lora-scale` flags are also available on `ZImageCLI control`.
+
+When the LoRA source is a local directory or Hugging Face snapshot that contains multiple `.safetensors` files, `--lora-file` is now required. The loader no longer picks an arbitrary file or merges multiple LoRA files implicitly.
+
+Example for the validated Distill adapter path:
+
+```bash
+./ZImageCLI \
+  -p "a cinematic portrait at golden hour" \
+  --model Tongyi-MAI/Z-Image \
+  --lora alibaba-pai/Z-Image-Fun-Lora-Distill \
+  --lora-file Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors \
+  --lora-scale 0.8 \
+  --steps 8 \
+  --guidance 1.0 \
+  -o distill.png
+```
 
 ## Prompt Enhancement
 
@@ -256,6 +272,7 @@ Important `control` flags:
 - `--mask` or `--mask-image`: optional mask for inpainting
 - `--controlnet-weights/--cw`: required ControlNet source
 - `--control-file/--cf`: optional file selector within a repo or directory
+- `--lora/-l`, `--lora-file`, `--lora-scale`: optional LoRA adapter and filename selector
 - `--control-scale/--cs`: control-context scale, default `0.75`
 - `--width/-W`, `--height/-H`, `--steps/-s`, `--guidance/-g`
   Width and height must be at least `64` and divisible by `16`.

@@ -42,6 +42,7 @@ public struct BatchDefaults: Codable, Sendable {
   public var cacheLimit: Int?
   public var maxSequenceLength: Int?
   public var loraPath: String?
+  public var loraFile: String?
   public var loraScale: Float?
   public var enhancePrompt: Bool?
   public var enhanceMaxTokens: Int?
@@ -81,6 +82,7 @@ public struct BatchJobRecord: Codable, Sendable {
   public var cacheLimit: Int?
   public var maxSequenceLength: Int?
   public var loraPath: String?
+  public var loraFile: String?
   public var loraScale: Float?
   public var enhancePrompt: Bool?
   public var enhanceMaxTokens: Int?
@@ -131,6 +133,7 @@ public struct BatchJobRecord: Codable, Sendable {
             cacheLimit: cacheLimit ?? defaults?.cacheLimit,
             maxSequenceLength: maxSequenceLength ?? defaults?.maxSequenceLength,
             loraPath: loraPath ?? defaults?.loraPath,
+            loraFile: loraFile ?? defaults?.loraFile,
             loraScale: loraScale ?? defaults?.loraScale ?? 1.0,
             enhancePrompt: enhancePrompt ?? defaults?.enhancePrompt ?? false,
             enhanceMaxTokens: enhanceMaxTokens ?? defaults?.enhanceMaxTokens ?? 512,
@@ -171,6 +174,7 @@ public struct BatchJobRecord: Codable, Sendable {
             cacheLimit: cacheLimit ?? defaults?.cacheLimit,
             maxSequenceLength: maxSequenceLength ?? defaults?.maxSequenceLength,
             loraPath: loraPath ?? defaults?.loraPath,
+            loraFile: loraFile ?? defaults?.loraFile,
             loraScale: loraScale ?? defaults?.loraScale ?? 1.0,
             enhancePrompt: enhancePrompt ?? defaults?.enhancePrompt ?? false,
             enhanceMaxTokens: enhanceMaxTokens ?? defaults?.enhanceMaxTokens ?? 512,

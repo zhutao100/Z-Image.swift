@@ -196,6 +196,7 @@ public enum CLICompatParser {
     var cacheLimit: Int?
     var maxSequenceLength: Int?
     var loraPath: String?
+    var loraFile: String?
     var loraScale: Float = 1.0
     var enhancePrompt = false
     var enhanceMaxTokens = 512
@@ -237,6 +238,8 @@ public enum CLICompatParser {
         maxSequenceLength = try intValue(for: arg, iterator: &iterator, minimum: 64, usage: .main)
       case "--lora", "-l":
         loraPath = try nextValue(for: arg, iterator: &iterator, usage: .main)
+      case "--lora-file":
+        loraFile = try nextValue(for: arg, iterator: &iterator, usage: .main)
       case "--lora-scale":
         loraScale = try floatValue(for: arg, iterator: &iterator, usage: .main)
       case "--enhance", "-e":
@@ -268,6 +271,7 @@ public enum CLICompatParser {
       cacheLimit: cacheLimit,
       maxSequenceLength: maxSequenceLength,
       loraPath: loraPath,
+      loraFile: loraFile,
       loraScale: loraScale,
       enhancePrompt: enhancePrompt,
       enhanceMaxTokens: enhanceMaxTokens,
@@ -305,6 +309,7 @@ public enum CLICompatParser {
     var cacheLimit: Int?
     var maxSequenceLength: Int?
     var loraPath: String?
+    var loraFile: String?
     var loraScale: Float = 1.0
     var enhancePrompt = false
     var enhanceMaxTokens = 512
@@ -356,6 +361,8 @@ public enum CLICompatParser {
         maxSequenceLength = try intValue(for: arg, iterator: &iterator, minimum: 64, usage: .control)
       case "--lora", "-l":
         loraPath = try nextValue(for: arg, iterator: &iterator, usage: .control)
+      case "--lora-file":
+        loraFile = try nextValue(for: arg, iterator: &iterator, usage: .control)
       case "--lora-scale":
         loraScale = try floatValue(for: arg, iterator: &iterator, usage: .control)
       case "--enhance", "-e":
@@ -408,6 +415,7 @@ public enum CLICompatParser {
       cacheLimit: cacheLimit,
       maxSequenceLength: maxSequenceLength,
       loraPath: loraPath,
+      loraFile: loraFile,
       loraScale: loraScale,
       enhancePrompt: enhancePrompt,
       enhanceMaxTokens: enhanceMaxTokens,

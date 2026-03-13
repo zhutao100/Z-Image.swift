@@ -251,7 +251,12 @@ public enum CLICommandRunner {
       guidanceScale: options.guidance,
       maxSequenceLength: options.maxSequenceLength
     )
-    let loraConfig = makeLoRAConfiguration(path: options.loraPath, scale: options.loraScale)
+    let loraConfig = makeLoRAConfiguration(
+      path: options.loraPath,
+      filename: options.loraFile,
+      scale: options.loraScale,
+      logger: logger
+    )
     warnIfLoRAUsesModelDefaults(
       loraConfig: loraConfig,
       steps: options.steps,
@@ -310,7 +315,12 @@ public enum CLICommandRunner {
       missingMessage: "Mask image not found: "
     )
 
-    let loraConfig = makeLoRAConfiguration(path: options.loraPath, scale: options.loraScale)
+    let loraConfig = makeLoRAConfiguration(
+      path: options.loraPath,
+      filename: options.loraFile,
+      scale: options.loraScale,
+      logger: logger
+    )
     warnIfLoRAUsesModelDefaults(
       loraConfig: loraConfig,
       steps: options.steps,
@@ -369,12 +379,35 @@ public enum CLICommandRunner {
     }
   }
 
-  private static func makeLoRAConfiguration(path: String?, scale: Float) -> LoRAConfiguration? {
+  private static func makeLoRAConfiguration(
+    path: String?,
+    filename: String?,
+    scale: Float,
+    logger: Logger
+  ) -> LoRAConfiguration? {
     guard let path else { return nil }
-    if path.hasPrefix("/") || path.hasPrefix("./") || path.hasPrefix("~") {
-      return .local(path, scale: scale)
+    let expandedPath = NSString(string: path).expandingTildeInPath
+    let isLocalPath =
+      expandedPath.hasPrefix("/")
+      || path.hasPrefix("./")
+      || path.hasPrefix("../")
+      || path.hasPrefix("~")
+      || FileManager.default.fileExists(atPath: expandedPath)
+
+    if isLocalPath {
+      let localURL = URL(fileURLWithPath: expandedPath)
+      if let filename, !filename.isEmpty {
+        if localURL.pathExtension == "safetensors" {
+          logger.warning(
+            "Ignoring --lora-file because --lora already points to a specific file: \(localURL.lastPathComponent)"
+          )
+          return .local(localURL, scale: scale)
+        }
+        return .local(localURL.appendingPathComponent(filename), scale: scale)
+      }
+      return .local(localURL, scale: scale)
     }
-    return .huggingFace(path, scale: scale)
+    return .huggingFace(path, filename: filename, scale: scale)
   }
 
   private static func warnIfLoRAUsesModelDefaults(

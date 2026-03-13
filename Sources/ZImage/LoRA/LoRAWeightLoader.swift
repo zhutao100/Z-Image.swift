@@ -77,10 +77,22 @@ public enum LoRAWeightLoader {
       )
     }
 
-    let rank = inferRank(from: loraWeights)
+    let filtered = filterSupportedTargets(loraWeights: loraWeights, lokrWeights: lokrWeights)
+    guard !filtered.loraPairs.isEmpty || !filtered.lokrWeights.isEmpty else {
+      let invalidTargets =
+        loraWeights.keys
+        + lokrWeights.keys.map { $0 + ".weight" }
+      let preview = invalidTargets.sorted().prefix(4).joined(separator: ", ")
+      let detail = preview.isEmpty ? "" : " Sample mapped targets: \(preview)"
+      throw LoRAError.incompatibleWeights(
+        "LoRA mapped zero valid target layers (standard=\(loraWeights.count), lokr=\(lokrWeights.count)).\(detail)"
+      )
+    }
+
+    let rank = inferRank(from: filtered.loraPairs)
     let alpha = loadAlpha(from: configDirectory)
 
-    return LoRAWeights(weights: loraWeights, lokrWeights: lokrWeights, rank: rank, alpha: alpha)
+    return LoRAWeights(weights: filtered.loraPairs, lokrWeights: filtered.lokrWeights, rank: rank, alpha: alpha)
   }
 
   public static func resolveSource(_ source: LoRASource) async throws -> URL {
@@ -205,21 +217,11 @@ public enum LoRAWeightLoader {
         filePatterns: filePatterns
       )
 
-      let fm = FileManager.default
-      let contents = try fm.contentsOfDirectory(at: snapshotURL, includingPropertiesForKeys: nil)
-
-      if let filename = filename {
-        let targetURL = snapshotURL.appendingPathComponent(filename)
-        if fm.fileExists(atPath: targetURL.path) {
-          return targetURL
-        }
+      let matches = try findSafetensorFiles(in: snapshotURL, preferredFile: filename)
+      guard let safetensorFile = matches.first else {
+        throw LoRAError.noSafetensorsFound(snapshotURL)
       }
-
-      if let safetensorFile = contents.first(where: { $0.pathExtension == "safetensors" }) {
-        return safetensorFile
-      }
-
-      throw LoRAError.noSafetensorsFound(snapshotURL)
+      return safetensorFile
     } catch let error as LoRAError {
       throw error
     } catch {
@@ -232,6 +234,11 @@ public enum LoRAWeightLoader {
     let lokrW1: [String: MLXArray]
     let lokrW2: [String: MLXArray]
     let lokrAlpha: [String: Float]
+  }
+
+  private struct FilteredLoRAWeights {
+    let loraPairs: [String: (down: MLXArray, up: MLXArray)]
+    let lokrWeights: [String: LoKrWeights]
   }
 
   private static func loadSafetensorFile(_ url: URL) throws -> PartialLoRAWeights {
@@ -283,7 +290,7 @@ public enum LoRAWeightLoader {
     )
   }
 
-  private static func findSafetensorFiles(in directory: URL) throws -> [URL] {
+  private static func findSafetensorFiles(in directory: URL, preferredFile: String? = nil) throws -> [URL] {
     let fm = FileManager.default
     guard let enumerator = fm.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) else {
       throw LoRAError.noSafetensorsFound(directory)
@@ -295,10 +302,36 @@ public enum LoRAWeightLoader {
         results.append(url)
       }
     }
+
+    if let preferredFile, !preferredFile.isEmpty {
+      let normalizedPreferred = preferredFile.trimmingCharacters(in: .whitespacesAndNewlines)
+      results = results.filter {
+        $0.lastPathComponent == normalizedPreferred
+          || $0.path.replacingOccurrences(of: directory.path + "/", with: "") == normalizedPreferred
+      }
+      if results.isEmpty {
+        throw LoRAError.fileNotFound(directory.appendingPathComponent(normalizedPreferred).path)
+      }
+    }
+
     if results.isEmpty {
       throw LoRAError.noSafetensorsFound(directory)
     }
-    return results.sorted(by: { $0.path < $1.path })
+    let sorted = results.sorted(by: { $0.path < $1.path })
+    if preferredFile == nil, sorted.count > 1 {
+      throw LoRAError.ambiguousSafetensorsSource(directory, sorted.map(\.lastPathComponent))
+    }
+    return sorted
+  }
+
+  private static func filterSupportedTargets(
+    loraWeights: [String: (down: MLXArray, up: MLXArray)],
+    lokrWeights: [String: LoKrWeights]
+  ) -> FilteredLoRAWeights {
+    let filteredLoRA = loraWeights.filter { LoRAKeyMapper.isValidTarget($0.key) }
+    let filteredLoKr = lokrWeights.filter { LoRAKeyMapper.isValidTarget($0.key + ".weight") }
+
+    return FilteredLoRAWeights(loraPairs: filteredLoRA, lokrWeights: filteredLoKr)
   }
 
   private static func mapLoKrModuleKey(_ key: String) -> (moduleKey: String, suffix: LoKrSuffix)? {

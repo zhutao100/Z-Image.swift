@@ -131,9 +131,12 @@ Text-to-image LoRA:
 ./ZImageCLI \
   -p "a lion painted like a children's book illustration" \
   --lora ostris/z_image_turbo_childrens_drawings \
+  --lora-file adapter.safetensors \
   --lora-scale 1.0 \
   -o lora.png
 ```
+
+When a LoRA repo or local directory contains multiple `.safetensors` files, `--lora-file` is required so the adapter selection stays deterministic.
 
 ControlNet:
 
@@ -164,7 +167,7 @@ Structured staged submission:
 
 `ZImageServe` reuses the normal generation flags for ad hoc requests, prints the accepted job id for cancellation, exposes `status`, `cancel`, and `shutdown` for daemon operations, and keeps JSON/markdown ingestion on the client side so the socket protocol stays canonical. Markdown ingestion accepts single fenced `bash`/`sh`/`zsh` invocations for direct `ZImageCLI` or `ZImageServe` commands, including explicit relative or absolute executable paths. Command substitutions are resolved when each markdown item starts, while wrappers, shell control operators, and other shell expansion syntax remain rejected.
 
-`ZImageCLI control` also accepts `--lora`, `--lora-scale`, `--enhance`, and `--enhance-max-tokens`.
+`ZImageCLI control` also accepts `--lora`, `--lora-file`, `--lora-scale`, `--enhance`, and `--enhance-max-tokens`.
 
 Quantize a local base-model directory:
 

@@ -1,8 +1,10 @@
+import Foundation
+import MLX
 import XCTest
 
 @testable import ZImage
 
-final class LoRALoaderTests: XCTestCase {
+final class LoRALoaderTests: MLXTestCase {
 
   func testLoRAUnetPrefixRemoval() {
     let input = "lora_unet_transformer_blocks.0.attn.to_q"
@@ -78,6 +80,22 @@ final class LoRALoaderTests: XCTestCase {
     XCTAssertEqual(result, expected)
   }
 
+  func testDistillUnderscoreAttentionKeyMapping() {
+    let input = "_layers_0_attention_to_q"
+    let expected = "layers.0.attention.to_q.weight"
+
+    let result = LoRAKeyMapper.mapToZImageKey(input)
+    XCTAssertEqual(result, expected)
+  }
+
+  func testDistillUnderscoreFeedForwardKeyMapping() {
+    let input = "_noise_refiner_1_feed_forward_w2"
+    let expected = "noise_refiner.1.feed_forward.w2.weight"
+
+    let result = LoRAKeyMapper.mapToZImageKey(input)
+    XCTAssertEqual(result, expected)
+  }
+
   func testValidTargetPaths() {
     XCTAssertTrue(LoRAKeyMapper.isValidTarget("layers.0.attention.to_q.weight"))
     XCTAssertTrue(LoRAKeyMapper.isValidTarget("layers.0.feed_forward.w1.weight"))
@@ -119,5 +137,67 @@ final class LoRALoaderTests: XCTestCase {
 
     let paths = LoRAKeyMapper.supportedTargetPaths
     XCTAssertEqual(paths.count, 238)
+  }
+
+  func testLoaderRejectsAmbiguousLocalDirectoryWithoutFilename() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("lora_dir_\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let firstFile = directory.appendingPathComponent("first.safetensors")
+    let secondFile = directory.appendingPathComponent("second.safetensors")
+    try Data().write(to: firstFile)
+    try Data().write(to: secondFile)
+
+    XCTAssertThrowsError(try LoRAWeightLoader.load(from: directory)) { error in
+      guard case LoRAError.ambiguousSafetensorsSource(let url, let files) = error else {
+        return XCTFail("Unexpected error: \(error)")
+      }
+      XCTAssertEqual(url.standardizedFileURL.path, directory.standardizedFileURL.path)
+      XCTAssertEqual(files.sorted(), ["first.safetensors", "second.safetensors"])
+    }
+  }
+
+  func testLoaderRejectsLoRAThatMapsZeroValidTargets() throws {
+    let fileURL = try makeLoRAFile(
+      named: "invalid_targets",
+      arrays: [
+        "lora_unet__layers_99_attention_to_q.lora_down.weight": MLXArray([Float(0), 1, 2, 3], [2, 2]).asType(.bfloat16),
+        "lora_unet__layers_99_attention_to_q.lora_up.weight": MLXArray([Float(0), 1, 2, 3], [2, 2]).asType(.bfloat16),
+      ]
+    )
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+
+    XCTAssertThrowsError(try LoRAWeightLoader.load(from: fileURL)) { error in
+      guard case LoRAError.incompatibleWeights(let message) = error else {
+        return XCTFail("Unexpected error: \(error)")
+      }
+      XCTAssertTrue(message.contains("zero valid target layers"))
+      XCTAssertTrue(message.contains("layers.99.attention.to_q.weight"))
+    }
+  }
+
+  func testLoaderAcceptsDistillUnderscoreTargets() throws {
+    let fileURL = try makeLoRAFile(
+      named: "distill_targets",
+      arrays: [
+        "lora_unet__layers_0_attention_to_q.lora_down.weight": MLXArray([Float(0), 1, 2, 3], [2, 2]).asType(.bfloat16),
+        "lora_unet__layers_0_attention_to_q.lora_up.weight": MLXArray([Float(0), 1, 2, 3], [2, 2]).asType(.bfloat16),
+        "lora_unet__noise_refiner_1_feed_forward_w2.lora_down.weight": MLXArray([Float(0), 1, 2, 3], [2, 2]).asType(.bfloat16),
+        "lora_unet__noise_refiner_1_feed_forward_w2.lora_up.weight": MLXArray([Float(0), 1, 2, 3], [2, 2]).asType(.bfloat16),
+      ]
+    )
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+
+    let weights = try LoRAWeightLoader.load(from: fileURL)
+    XCTAssertEqual(weights.layerCount, 2)
+    XCTAssertTrue(weights.weights.keys.contains("layers.0.attention.to_q.weight"))
+    XCTAssertTrue(weights.weights.keys.contains("noise_refiner.1.feed_forward.w2.weight"))
+  }
+
+  private func makeLoRAFile(named stem: String, arrays: [String: MLXArray]) throws -> URL {
+    let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(stem)_\(UUID().uuidString).safetensors")
+    try MLX.save(arrays: arrays, metadata: [:], url: fileURL)
+    return fileURL
   }
 }

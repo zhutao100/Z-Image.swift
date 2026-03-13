@@ -49,6 +49,7 @@ public struct TextGenerationOptions: Codable, Sendable, Equatable {
   public var cacheLimit: Int?
   public var maxSequenceLength: Int?
   public var loraPath: String?
+  public var loraFile: String?
   public var loraScale: Float
   public var enhancePrompt: Bool
   public var enhanceMaxTokens: Int
@@ -71,6 +72,7 @@ public struct TextGenerationOptions: Codable, Sendable, Equatable {
     cacheLimit: Int? = nil,
     maxSequenceLength: Int? = nil,
     loraPath: String? = nil,
+    loraFile: String? = nil,
     loraScale: Float = 1.0,
     enhancePrompt: Bool = false,
     enhanceMaxTokens: Int = 512,
@@ -92,6 +94,7 @@ public struct TextGenerationOptions: Codable, Sendable, Equatable {
     self.cacheLimit = cacheLimit
     self.maxSequenceLength = maxSequenceLength
     self.loraPath = loraPath
+    self.loraFile = loraFile
     self.loraScale = loraScale
     self.enhancePrompt = enhancePrompt
     self.enhanceMaxTokens = enhanceMaxTokens
@@ -122,6 +125,7 @@ public struct ControlGenerationOptions: Codable, Sendable, Equatable {
   public var cacheLimit: Int?
   public var maxSequenceLength: Int?
   public var loraPath: String?
+  public var loraFile: String?
   public var loraScale: Float
   public var enhancePrompt: Bool
   public var enhanceMaxTokens: Int
@@ -150,6 +154,7 @@ public struct ControlGenerationOptions: Codable, Sendable, Equatable {
     cacheLimit: Int? = nil,
     maxSequenceLength: Int? = nil,
     loraPath: String? = nil,
+    loraFile: String? = nil,
     loraScale: Float = 1.0,
     enhancePrompt: Bool = false,
     enhanceMaxTokens: Int = 512,
@@ -177,6 +182,7 @@ public struct ControlGenerationOptions: Codable, Sendable, Equatable {
     self.cacheLimit = cacheLimit
     self.maxSequenceLength = maxSequenceLength
     self.loraPath = loraPath
+    self.loraFile = loraFile
     self.loraScale = loraScale
     self.enhancePrompt = enhancePrompt
     self.enhanceMaxTokens = enhanceMaxTokens

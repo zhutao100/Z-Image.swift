@@ -9,6 +9,8 @@ final class CLICompatParserTests: XCTestCase {
       "--output", "lake.png",
       "--steps", "12",
       "--guidance", "1.5",
+      "--lora", "alibaba-pai/Z-Image-Fun-Lora-Distill",
+      "--lora-file", "Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors",
       "--no-progress",
     ])
 
@@ -20,6 +22,8 @@ final class CLICompatParserTests: XCTestCase {
     XCTAssertEqual(options.outputPath, "lake.png")
     XCTAssertEqual(options.steps, 12)
     XCTAssertEqual(options.guidance, 1.5)
+    XCTAssertEqual(options.loraPath, "alibaba-pai/Z-Image-Fun-Lora-Distill")
+    XCTAssertEqual(options.loraFile, "Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors")
     XCTAssertTrue(options.noProgress)
   }
 
@@ -134,7 +138,14 @@ final class CLICompatParserTests: XCTestCase {
       type: .submit,
       submission: ServiceSubmissionPayload(
         jobID: "job-1",
-        job: .from(.text(TextGenerationOptions(prompt: "test", outputPath: "out.png")))
+        job: .from(
+          .text(
+            TextGenerationOptions(
+              prompt: "test",
+              outputPath: "out.png",
+              loraPath: "alibaba-pai/Z-Image-Fun-Lora-Distill",
+              loraFile: "Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors"
+            )))
       )
     )
 
@@ -142,7 +153,15 @@ final class CLICompatParserTests: XCTestCase {
     let decoded = try JSONDecoder().decode(ServiceRequestEnvelope.self, from: data)
 
     XCTAssertEqual(decoded, request)
-    XCTAssertEqual(try decoded.submission?.job.asPayload(), .text(TextGenerationOptions(prompt: "test", outputPath: "out.png")))
+    XCTAssertEqual(
+      try decoded.submission?.job.asPayload(),
+      .text(
+        TextGenerationOptions(
+          prompt: "test",
+          outputPath: "out.png",
+          loraPath: "alibaba-pai/Z-Image-Fun-Lora-Distill",
+          loraFile: "Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors"
+        )))
   }
 
   func testServiceEnvelopeRoundTripsStatusAndCancelPayloads() throws {

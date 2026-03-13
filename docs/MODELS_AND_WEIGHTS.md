@@ -174,6 +174,28 @@ Source of truth:
 - `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
 - `Sources/ZImage/Quantization/ZImageQuantization.swift`
 
+## LoRA Weights
+
+`--lora` accepts:
+
+- a local `.safetensors`
+- a local directory
+- a Hugging Face repo id
+
+`--lora-file` can now be used to choose a specific `.safetensors` file when the source contains more than one.
+
+Current fail-closed behavior:
+
+- local directories with multiple `.safetensors` files are rejected unless the path resolves to a specific file
+- Hugging Face LoRA repos with multiple `.safetensors` files are rejected unless `--lora-file` or `LoRAConfiguration.huggingFace(..., filename:)` selects one explicitly
+- LoRA loads that map zero valid Swift target layers fail with an incompatibility error instead of proceeding as a silent no-op
+
+Source of truth:
+
+- `Sources/ZImage/LoRA/LoRAConfiguration.swift`
+- `Sources/ZImage/LoRA/LoRAKeyMapper.swift`
+- `Sources/ZImage/LoRA/LoRAWeightLoader.swift`
+
 ## Troubleshooting
 
 ### Model Not Found

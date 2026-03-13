@@ -128,6 +128,7 @@ public enum LoRAError: Error, LocalizedError {
   case incompatibleWeights(String)
   case downloadFailed(String, Error)
   case noSafetensorsFound(URL)
+  case ambiguousSafetensorsSource(URL, [String])
 
   public var errorDescription: String? {
     switch self {
@@ -141,6 +142,9 @@ public enum LoRAError: Error, LocalizedError {
       return "Failed to download LoRA '\(modelId)': \(error.localizedDescription)"
     case .noSafetensorsFound(let url):
       return "No .safetensors files found in \(url.path)"
+    case .ambiguousSafetensorsSource(let url, let files):
+      let fileList = files.sorted().joined(separator: ", ")
+      return "Multiple .safetensors files found in \(url.path). Specify a filename explicitly. Candidates: \(fileList)"
     }
   }
 }

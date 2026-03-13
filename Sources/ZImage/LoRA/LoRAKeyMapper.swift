@@ -13,6 +13,10 @@ public struct LoRAKeyMapper {
     "attn1.to_v": "attention.to_v",
     "attn1.to_out.0": "attention.to_out.0",
     "attention.out.0": "attention.to_out.0",
+    "attention_to_q": "attention.to_q",
+    "attention_to_k": "attention.to_k",
+    "attention_to_v": "attention.to_v",
+    "attention_to_out_0": "attention.to_out.0",
     "self_attn.q_proj": "attention.to_q",
     "self_attn.k_proj": "attention.to_k",
     "self_attn.v_proj": "attention.to_v",
@@ -21,6 +25,9 @@ public struct LoRAKeyMapper {
     "ff.net.2": "feed_forward.w2",
     "ff_net_0_proj": "feed_forward.w1",
     "ff_net_2": "feed_forward.w2",
+    "feed_forward_w1": "feed_forward.w1",
+    "feed_forward_w2": "feed_forward.w2",
+    "feed_forward_w3": "feed_forward.w3",
     "mlp.gate_proj": "feed_forward.w1",
     "mlp.up_proj": "feed_forward.w3",
     "mlp.down_proj": "feed_forward.w2",
@@ -134,7 +141,7 @@ public struct LoRAKeyMapper {
 
   private static func convertUnderscoreToDot(_ key: String) -> String {
     var result = ""
-    var components = key.split(separator: "_").map(String.init)
+    let components = key.split(separator: "_").map(String.init)
 
     var i = 0
     while i < components.count {

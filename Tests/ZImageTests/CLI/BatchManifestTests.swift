@@ -11,7 +11,9 @@ final class BatchManifestTests: XCTestCase {
           "model": "mzbac/z-image-turbo-8bit",
           "width": 256,
           "height": 256,
-          "steps": 9
+          "steps": 9,
+          "loraPath": "alibaba-pai/Z-Image-Fun-Lora-Distill",
+          "loraFile": "Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors"
         },
         "jobs": [
           {
@@ -37,6 +39,8 @@ final class BatchManifestTests: XCTestCase {
     XCTAssertEqual(options.width, 256)
     XCTAssertEqual(options.height, 256)
     XCTAssertEqual(options.steps, 9)
+    XCTAssertEqual(options.loraPath, "alibaba-pai/Z-Image-Fun-Lora-Distill")
+    XCTAssertEqual(options.loraFile, "Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors")
     XCTAssertEqual(options.outputPath, "lake.png")
   }
 
