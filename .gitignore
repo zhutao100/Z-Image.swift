@@ -1,21 +1,15 @@
-# SwiftPM/Xcode
-/.build/
-/Packages/
-/DerivedData/
-xcuserdata/
-*.xcodeproj
-.swiftpm/xcode
-.swiftpm/cache
-
-# OS
-.DS_Store
+# Build files
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
 
 # Local temp & caches
+.DS_Store
 temp/
 *.cache
 *.profraw
 
-# Model artifacts
-models/
-checkpoints/
-outputs/
+# Local config overrides
+config/external-projects.local.yaml

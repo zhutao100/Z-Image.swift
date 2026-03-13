@@ -1,0 +1,15 @@
+# Copy to and config at: config/external-projects.local.yaml (gitignored)
+# Fill local paths for external reference repos used during implementation/research.
+
+external_projects:
+  diffusers:
+    enabled: false
+    url: "https://github.com/huggingface/diffusers"
+    local_path: "/absolute/path/to/diffusers"
+    notes: "Use the Diffusers reference when checking model scheduler behavior, pipeline parity, etc."
+
+  VideoX-Fun:
+    enabled: false
+    url: "https://github.com/aigc-apps/VideoX-Fun.git"
+    local_path: "/absolute/path/to/VideoX-Fun"
+    notes: "use the VideoX-Fun reference when checking the Fun-Controlnet-Union and Fun-Lora-Distill weight conversion and pipeline parity."

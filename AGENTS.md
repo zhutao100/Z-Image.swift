@@ -133,19 +133,17 @@ If you change build flags, artifact names, or release semantics, update `docs/DE
 - Model-loading bugs: inspect `Tests/ZImageTests/Weights/*` before changing resolver logic.
 - Base vs Turbo behavior: inspect `Sources/ZImage/Support/ZImageModelRegistry.swift` and `Tests/ZImageTests/Support/ZImageModelRegistryTests.swift`.
 
-## External Reference
+## External References
 
-Some implementations were validated against Hugging Face Diffusers:
+Useful external reference projects are listed in `config/external-projects.example.yaml`.
 
-- Local checkout: `~/workspace/custom-builds/diffusers`
-- Upstream: `https://github.com/huggingface/diffusers`
-
-Use the Diffusers reference when checking weight naming, scheduler behavior, or pipeline parity. When running Python tooling for that comparison, use `PYENV_VERSION=venv313 pyenv exec ...`.
+For external-project references, prefer local clones configured in `config/external-projects.local.yaml`.
 
 ## Useful Local Resources
 
 - Inspect `.safetensors` contents:
   - `~/bin/stls.py --format toon <file.safetensors>`
+  - If not present: `curl https://gist.githubusercontent.com/zhutao100/cc481d2cd248aa8769e1abb3887facc8/raw/89d644c490bcf5386cb81ebcc36c92471f578c60/stls.py > /tmp/stls.py`
 - Common Hugging Face snapshot roots:
   - `~/.cache/huggingface/hub/models--Tongyi-MAI--Z-Image-Turbo/snapshots`
   - `~/.cache/huggingface/hub/models--Tongyi-MAI--Z-Image/snapshots`
