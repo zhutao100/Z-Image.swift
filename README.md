@@ -149,6 +149,8 @@ ControlNet:
   --output control.png
 ```
 
+When a ControlNet repo or local directory contains multiple `.safetensors` files, `--control-file` is required. The current Z-Image Fun Base support target is the full Union 2.1 file `Z-Image-Fun-Controlnet-Union-2.1.safetensors`; upstream Lite and Tile filenames are rejected explicitly for now.
+
 Staging daemon:
 
 ```bash

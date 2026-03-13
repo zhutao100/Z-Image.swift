@@ -166,6 +166,17 @@ The relevant code is in `Sources/ZImage/Pipeline/ZImagePipeline.swift`.
 
 `--control-file` can be used to choose a specific `.safetensors` file when the source contains more than one.
 
+Current fail-closed behavior:
+
+- local or cached directories with multiple `.safetensors` files are rejected unless `--control-file` selects one explicitly
+- the current Z-Image Fun Base support target is the full Union 2.1 file:
+  - `Z-Image-Fun-Controlnet-Union-2.1.safetensors`
+- the current upstream Lite and Tile filenames for the Z-Image Fun Base family are rejected explicitly instead of loading under the full-Union assumptions
+- selected ControlNet weights are also validated against the current full-layout contract:
+  - `15` control layer blocks
+  - `2` control refiner blocks
+  - `control_in_dim = 33`
+
 Quantized ControlNet directories use `controlnet_quantization.json`.
 
 Source of truth:

@@ -235,6 +235,14 @@ Minimal ControlNet example:
   --output control.png
 ```
 
+For `alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1`, the initial supported file is the full Union checkpoint:
+
+```text
+Z-Image-Fun-Controlnet-Union-2.1.safetensors
+```
+
+The loader now rejects ambiguous multi-file ControlNet sources unless `--control-file` is set, and it rejects the current upstream Lite and Tile filenames for the Z-Image Fun Base family.
+
 Inpainting example:
 
 ```bash
@@ -264,6 +272,52 @@ ControlNet with LoRA and prompt enhancement:
   --output control-lora.png
 ```
 
+Additional full-Union control patterns:
+
+```bash
+# HED-style control
+./ZImageCLI control \
+  --prompt "a noir kitchen scene lit by a single warm pendant light" \
+  --control-image /path/to/hed.png \
+  --controlnet-weights alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1 \
+  --control-file Z-Image-Fun-Controlnet-Union-2.1.safetensors \
+  --control-scale 0.75 \
+  --model Tongyi-MAI/Z-Image \
+  --output hed-base.png
+
+# Gray / tonal structure control
+./ZImageCLI control \
+  --prompt "a portrait with soft cinematic grayscale structure" \
+  --control-image /path/to/gray.png \
+  --controlnet-weights alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1 \
+  --control-file Z-Image-Fun-Controlnet-Union-2.1.safetensors \
+  --control-scale 0.8 \
+  --model Tongyi-MAI/Z-Image \
+  --output gray-base.png
+
+# Scribble control
+./ZImageCLI control \
+  --prompt "a whimsical concept sketch rendered as a polished illustration" \
+  --control-image /path/to/scribble.png \
+  --controlnet-weights alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1 \
+  --control-file Z-Image-Fun-Controlnet-Union-2.1.safetensors \
+  --control-scale 0.9 \
+  --model Tongyi-MAI/Z-Image \
+  --output scribble-base.png
+
+# Inpaint + control
+./ZImageCLI control \
+  --prompt "restore the missing section as a weathered stone archway" \
+  --control-image /path/to/canny.png \
+  --inpaint-image /path/to/source.png \
+  --mask /path/to/mask.png \
+  --controlnet-weights alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1 \
+  --control-file Z-Image-Fun-Controlnet-Union-2.1.safetensors \
+  --control-scale 0.75 \
+  --model Tongyi-MAI/Z-Image \
+  --output inpaint-control-base.png
+```
+
 Important `control` flags:
 
 - `--prompt/-p`: required
@@ -271,9 +325,9 @@ Important `control` flags:
 - `--inpaint-image/-i`: optional inpaint source
 - `--mask` or `--mask-image`: optional mask for inpainting
 - `--controlnet-weights/--cw`: required ControlNet source
-- `--control-file/--cf`: optional file selector within a repo or directory
+- `--control-file/--cf`: file selector within a repo or directory; required when the source contains multiple `.safetensors`
 - `--lora/-l`, `--lora-file`, `--lora-scale`: optional LoRA adapter and filename selector
-- `--control-scale/--cs`: control-context scale, default `0.75`
+- `--control-scale/--cs`: control-context scale, default `0.75`; upstream full-Union guidance is `0.65 ... 1.00`
 - `--width/-W`, `--height/-H`, `--steps/-s`, `--guidance/-g`
   Width and height must be at least `64` and divisible by `16`.
 - `--cfg-normalization`, `--cfg-truncation`

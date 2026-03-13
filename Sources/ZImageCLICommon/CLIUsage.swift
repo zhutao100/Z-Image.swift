@@ -175,9 +175,9 @@ public enum CLIUsageFormatter {
         --control-image, -c       Control image path - Canny, HED, Depth, Pose, or MLSD
         --inpaint-image, -i       Source image for inpainting (v2.0+)
         --mask, --mask-image      Mask image for inpainting (white=fill, black=preserve)
-        --control-scale, --cs     Control context scale (default: 0.75, recommended: 0.65-0.90)
+        --control-scale, --cs     Control context scale (default: 0.75, recommended: 0.65-1.00)
         --controlnet-weights, --cw Path to controlnet safetensors or HuggingFace ID (required)
-        --control-file, --cf      Specific safetensors filename within repo (e.g., "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors")
+        --control-file, --cf      Specific safetensors filename within repo (required for multi-file sources)
         --width, -W               Output width (default \(ZImageModelMetadata.recommendedWidth))
         --height, -H              Output height (default \(ZImageModelMetadata.recommendedHeight))
                                  Width and height must be >= \(minimumImageDimension) and divisible by \(requiredImageDimensionMultiple).

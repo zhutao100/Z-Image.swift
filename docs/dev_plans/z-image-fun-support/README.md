@@ -2,6 +2,22 @@
 
 Status: active on March 13, 2026
 
+## Implementation status
+
+- Phase 1 complete:
+  - `--lora-file` is exposed across text CLI, control CLI, batch manifests, and staged request payloads
+  - multi-file LoRA sources now fail closed unless a specific file is selected
+  - the inspected Distill underscore-form keys now map onto valid Swift target paths
+  - LoRA loads that resolve to zero valid target layers now fail clearly instead of silently no-oping
+- Phase 2 complete:
+  - ambiguous multi-file ControlNet directories now fail closed unless `--control-file` is set
+  - the current Z-Image Fun Base ControlNet support target is the full Union 2.1 file only
+  - current upstream Lite and Tile filenames for the Z-Image Fun Base family are rejected explicitly
+  - selected ControlNet weights are validated against the current full-layout contract (`15` layer blocks, `2` refiner blocks, `control_in_dim = 33`)
+- Phase 3 remains optional:
+  - adapter-aware preset warnings
+  - broader Lite/Tile generalization
+
 ## Scope
 
 This plan covers the work needed to add practical, first-class support for:

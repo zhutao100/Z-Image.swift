@@ -1130,6 +1130,100 @@ public class ZImageControlPipeline: @unchecked Sendable {
     let manifest: ZImageQuantizationManifest?
   }
 
+  static func resolveControlnetWeightFiles(in directory: URL, preferredFile: String? = nil) throws -> [URL] {
+    let fm = FileManager.default
+    let contents = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+    var safetensorsFiles = contents.filter { $0.pathExtension == "safetensors" }.sorted(by: { $0.path < $1.path })
+
+    if let preferredFile {
+      safetensorsFiles = safetensorsFiles.filter { $0.lastPathComponent == preferredFile }
+      if safetensorsFiles.isEmpty {
+        throw PipelineError.weightsMissing(
+          "Specified controlnet file '\(preferredFile)' not found in directory: \(directory.path)")
+      }
+    }
+
+    guard !safetensorsFiles.isEmpty else {
+      throw PipelineError.weightsMissing("No .safetensors file found in controlnet directory: \(directory.path)")
+    }
+
+    if preferredFile == nil, safetensorsFiles.count > 1 {
+      let candidates = safetensorsFiles.map(\.lastPathComponent).joined(separator: ", ")
+      throw PipelineError.weightsMissing(
+        "Multiple controlnet .safetensors files found in \(directory.path). Specify --control-file. Candidates: \(candidates)"
+      )
+    }
+
+    return safetensorsFiles
+  }
+
+  static func validateSupportedControlnetSelection(file: URL) throws {
+    let filename = file.lastPathComponent.lowercased()
+    guard filename.contains("z-image-fun-controlnet") else { return }
+
+    if filename.contains("tile") {
+      throw PipelineError.weightsMissing(
+        "Unsupported Z-Image Fun ControlNet file '\(file.lastPathComponent)'. Initial support covers the full Union 2.1 file only; Tile variants are not supported yet."
+      )
+    }
+
+    if filename.contains("lite") {
+      throw PipelineError.weightsMissing(
+        "Unsupported Z-Image Fun ControlNet file '\(file.lastPathComponent)'. Initial support covers the full Union 2.1 file only; Lite variants are not supported yet."
+      )
+    }
+  }
+
+  static func validateSupportedControlnetWeights(
+    _ weights: [String: MLXArray],
+    sourceName: String,
+    expectedConfig: ZImageControlNetConfig = .init()
+  ) throws {
+    let expectedLayerIndices = Set(0..<expectedConfig.controlLayersPlaces.count)
+    let actualLayerIndices = controlnetBlockIndices(prefix: "control_layers", in: weights.keys)
+    guard actualLayerIndices == expectedLayerIndices else {
+      throw PipelineError.weightsMissing(
+        "Unsupported ControlNet layout in \(sourceName). Expected \(expectedLayerIndices.count) control layer blocks for full Union 2.1, found \(actualLayerIndices.count). Lite and other variants are not supported yet."
+      )
+    }
+
+    let expectedRefinerIndices = Set(0..<expectedConfig.controlRefinerLayersPlaces.count)
+    let actualRefinerIndices = controlnetBlockIndices(prefix: "control_noise_refiner", in: weights.keys)
+    guard actualRefinerIndices == expectedRefinerIndices else {
+      throw PipelineError.weightsMissing(
+        "Unsupported ControlNet refiner layout in \(sourceName). Expected \(expectedRefinerIndices.count) control refiner blocks for full Union 2.1, found \(actualRefinerIndices.count). Lite and other variants are not supported yet."
+      )
+    }
+
+    if let embedderWeight = weights["control_all_x_embedder.2-1.weight"], embedderWeight.ndim == 2 {
+      let patchInputFeatures = embedderWeight.dim(1)
+      let expectedPatchInputFeatures = 4 * expectedConfig.controlInDim
+      guard patchInputFeatures == expectedPatchInputFeatures else {
+        throw PipelineError.weightsMissing(
+          "Unsupported ControlNet embedder width in \(sourceName). Expected \(expectedPatchInputFeatures) input features for full Union 2.1, found \(patchInputFeatures)."
+        )
+      }
+    }
+  }
+
+  private static func controlnetBlockIndices(
+    prefix: String,
+    in keys: Dictionary<String, MLXArray>.Keys
+  ) -> Set<Int> {
+    let prefixWithDot = "\(prefix)."
+    var indices = Set<Int>()
+
+    for key in keys where key.hasPrefix(prefixWithDot) {
+      let remainder = key.dropFirst(prefixWithDot.count)
+      guard let indexComponent = remainder.split(separator: ".", maxSplits: 1).first,
+        let index = Int(indexComponent)
+      else { continue }
+      indices.insert(index)
+    }
+
+    return indices
+  }
+
   private func loadControlnetWeights(
     controlnetSpec: String,
     preferredFile: String? = nil,
@@ -1146,6 +1240,8 @@ public class ZImageControlPipeline: @unchecked Sendable {
         ))
       logger.info("Loading controlnet from local file: \(controlnetSpec)")
       let weights = try loadSafetensorsFile(url: localURL, dtype: dtype)
+      try Self.validateSupportedControlnetSelection(file: localURL)
+      try Self.validateSupportedControlnetWeights(weights, sourceName: localURL.lastPathComponent)
       return ControlnetWeightsResult(weights: weights, manifest: nil)
     }
     var isDirectory: ObjCBool = false
@@ -1188,34 +1284,28 @@ public class ZImageControlPipeline: @unchecked Sendable {
   private func loadControlnetFromDirectory(_ directory: URL, dtype: DType, preferredFile: String? = nil) throws
     -> ControlnetWeightsResult
   {
-    let fm = FileManager.default
     var manifest: ZImageQuantizationManifest? = nil
     if let loadedManifest = try ZImageQuantizer.loadControlnetManifest(from: directory) {
       logger.info(
         "Found quantized controlnet manifest: \(loadedManifest.bits)-bit, group_size=\(loadedManifest.groupSize)")
       manifest = loadedManifest
     }
-    let contents = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-    var safetensorsFiles = contents.filter { $0.pathExtension == "safetensors" }
+    let safetensorsFiles = try Self.resolveControlnetWeightFiles(in: directory, preferredFile: preferredFile)
     if let preferredFile {
-      safetensorsFiles = safetensorsFiles.filter { $0.lastPathComponent == preferredFile }
-      if safetensorsFiles.isEmpty {
-        throw PipelineError.weightsMissing(
-          "Specified controlnet file '\(preferredFile)' not found in directory: \(directory.path)")
-      }
       logger.info("Using specified controlnet file: \(preferredFile)")
-    }
-    guard !safetensorsFiles.isEmpty else {
-      throw PipelineError.weightsMissing("No .safetensors file found in controlnet directory: \(directory.path)")
     }
     let preserveQuantized = manifest != nil
     var allWeights: [String: MLXArray] = [:]
     for file in safetensorsFiles {
+      try Self.validateSupportedControlnetSelection(file: file)
       logger.info("Loading controlnet weights from \(file.lastPathComponent)")
       let weights = try loadSafetensorsFile(url: file, dtype: dtype, preserveQuantized: preserveQuantized)
       for (key, value) in weights {
         allWeights[key] = value
       }
+    }
+    if let selectedFile = safetensorsFiles.first {
+      try Self.validateSupportedControlnetWeights(allWeights, sourceName: selectedFile.lastPathComponent)
     }
     return ControlnetWeightsResult(weights: allWeights, manifest: manifest)
   }
