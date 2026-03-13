@@ -52,6 +52,27 @@ final class CLICompatParserTests: XCTestCase {
     XCTAssertEqual(options.socketPath, "/tmp/zimage-serve.sock")
   }
 
+  func testServeParserParsesWarmServeOptions() throws {
+    let command = try CLICompatParser.parseServe([
+      "serve",
+      "--residency-policy", "warm",
+      "--warm-model", "mzbac/z-image-turbo-8bit",
+      "--weights-variant", "bf16",
+      "--idle-timeout", "45",
+      "--max-sequence-length", "1024",
+    ])
+
+    guard case .serve(let options) = command else {
+      return XCTFail("Expected serve command")
+    }
+
+    XCTAssertEqual(options.residencyPolicy, .warm)
+    XCTAssertEqual(options.warmModel, "mzbac/z-image-turbo-8bit")
+    XCTAssertEqual(options.warmWeightsVariant, "bf16")
+    XCTAssertEqual(options.idleTimeoutSeconds, 45, accuracy: 0.001)
+    XCTAssertEqual(options.warmMaxSequenceLength, 1024)
+  }
+
   func testServeParserParsesAdHocSubmissionWithGlobalSocket() throws {
     let command = try CLICompatParser.parseServe([
       "--socket", "/tmp/zimage.sock",

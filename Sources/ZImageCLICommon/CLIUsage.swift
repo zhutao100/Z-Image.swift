@@ -227,6 +227,13 @@ public enum CLIUsageFormatter {
 
       Usage: ZImageServe serve [options]
         --socket, -S         Unix domain socket path (default: user cache directory)
+        --residency-policy   one-shot, warm, or adaptive (default: adaptive)
+        --warm-model         Warm this base model profile on startup
+        --weights-variant    Warmup weights variant override
+        --warm-controlnet-weights  Warm a control worker instead of a text worker
+        --warm-control-file  ControlNet file selector for warmup
+        --max-sequence-length Warmup profile max sequence length (default: 512)
+        --idle-timeout       Idle eviction timeout in seconds (default: 300)
         --help, -h           Show help
 
       Submit jobs with the same generation flags as ZImageCLI:

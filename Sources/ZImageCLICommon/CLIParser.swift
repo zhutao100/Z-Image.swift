@@ -1,3 +1,6 @@
+import Foundation
+import ZImage
+
 public enum CLICompatParser {
   private static let minimumImageDimension = 64
   private static let requiredImageDimensionMultiple = 16
@@ -66,16 +69,47 @@ public enum CLICompatParser {
 
     var iterator = args.makeIterator()
     var resolvedSocketPath = socketPath
+    var residencyPolicy: ModuleResidencyPolicy = .adaptive
+    var warmModel: String?
+    var warmWeightsVariant: String?
+    var warmControlnetWeights: String?
+    var warmControlnetFile: String?
+    var warmMaxSequenceLength = 512
+    var idleTimeoutSeconds: TimeInterval = 300
     while let arg = iterator.next() {
       switch arg {
       case "--socket", "-S":
         resolvedSocketPath = try nextValue(for: arg, iterator: &iterator, usage: .serve)
+      case "--residency-policy":
+        residencyPolicy = try residencyPolicyValue(for: arg, iterator: &iterator, usage: .serve)
+      case "--warm-model":
+        warmModel = try nextValue(for: arg, iterator: &iterator, usage: .serve)
+      case "--weights-variant":
+        warmWeightsVariant = try nextValue(for: arg, iterator: &iterator, usage: .serve)
+      case "--warm-controlnet-weights":
+        warmControlnetWeights = try nextValue(for: arg, iterator: &iterator, usage: .serve)
+      case "--warm-control-file":
+        warmControlnetFile = try nextValue(for: arg, iterator: &iterator, usage: .serve)
+      case "--max-sequence-length":
+        warmMaxSequenceLength = try intValue(for: arg, iterator: &iterator, minimum: 64, usage: .serve)
+      case "--idle-timeout":
+        idleTimeoutSeconds = TimeInterval(try floatValue(for: arg, iterator: &iterator, minimum: 0, usage: .serve))
       default:
         throw CLIError(message: "Unknown serve argument: \(arg)", usage: .serve)
       }
     }
 
-    return .serve(ServeOptions(socketPath: resolvedSocketPath))
+    return .serve(
+      ServeOptions(
+        socketPath: resolvedSocketPath,
+        residencyPolicy: residencyPolicy,
+        warmModel: warmModel,
+        warmWeightsVariant: warmWeightsVariant,
+        warmControlnetWeights: warmControlnetWeights,
+        warmControlnetFile: warmControlnetFile,
+        warmMaxSequenceLength: warmMaxSequenceLength,
+        idleTimeoutSeconds: idleTimeoutSeconds
+      ))
   }
 
   private static func parseTextGeneration(_ args: [String]) throws -> TextGenerationOptions {
@@ -493,5 +527,20 @@ public enum CLICompatParser {
       )
     }
     return value
+  }
+
+  private static func residencyPolicyValue(
+    for arg: String,
+    iterator: inout IndexingIterator<[String]>,
+    usage: CLIUsageTopic
+  ) throws -> ModuleResidencyPolicy {
+    let rawValue = try nextValue(for: arg, iterator: &iterator, usage: usage)
+    guard let policy = ModuleResidencyPolicy(rawValue: rawValue) else {
+      throw CLIError(
+        message: "Invalid value for \(arg): '\(rawValue)'. Expected one-shot, warm, or adaptive.",
+        usage: usage
+      )
+    }
+    return policy
   }
 }

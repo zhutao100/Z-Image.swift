@@ -1,4 +1,5 @@
 import Foundation
+import ZImage
 
 public enum CLIProgramKind: String, Sendable, Equatable {
   case cli = "ZImageCLI"
@@ -222,9 +223,32 @@ public struct QuantizeControlnetOptions: Sendable, Equatable {
 
 public struct ServeOptions: Sendable, Equatable {
   public var socketPath: String?
+  public var residencyPolicy: ModuleResidencyPolicy
+  public var warmModel: String?
+  public var warmWeightsVariant: String?
+  public var warmControlnetWeights: String?
+  public var warmControlnetFile: String?
+  public var warmMaxSequenceLength: Int
+  public var idleTimeoutSeconds: TimeInterval
 
-  public init(socketPath: String? = nil) {
+  public init(
+    socketPath: String? = nil,
+    residencyPolicy: ModuleResidencyPolicy = .adaptive,
+    warmModel: String? = nil,
+    warmWeightsVariant: String? = nil,
+    warmControlnetWeights: String? = nil,
+    warmControlnetFile: String? = nil,
+    warmMaxSequenceLength: Int = 512,
+    idleTimeoutSeconds: TimeInterval = 300
+  ) {
     self.socketPath = socketPath
+    self.residencyPolicy = residencyPolicy
+    self.warmModel = warmModel
+    self.warmWeightsVariant = warmWeightsVariant
+    self.warmControlnetWeights = warmControlnetWeights
+    self.warmControlnetFile = warmControlnetFile
+    self.warmMaxSequenceLength = warmMaxSequenceLength
+    self.idleTimeoutSeconds = idleTimeoutSeconds
   }
 }
 

@@ -171,6 +171,47 @@ Current measured status from the March 8, 2026 follow-up run:
 
 The current follow-up summary lives in [dev_plans/controlnet-memory-followup.md](dev_plans/controlnet-memory-followup.md).
 
+### Staging-Daemon Warm-Serving Validation
+
+When changing `ZImageServe`, the CLI shared layer, or the serving residency policy, keep a repeated-request probe in the loop:
+
+```bash
+swift build --product ZImageServe
+SOCKET=/tmp/zimage-serve-stage.sock
+.build/debug/ZImageServe serve \
+  --socket "$SOCKET" \
+  --residency-policy adaptive \
+  --warm-model mzbac/z-image-turbo-8bit &
+
+.build/debug/ZImageServe --socket "$SOCKET" \
+  -p "a red apple on black velvet" \
+  -m mzbac/z-image-turbo-8bit \
+  -W 256 -H 256 -s 1 --no-progress \
+  -o /tmp/zimage-stage-1.png
+
+.build/debug/ZImageServe --socket "$SOCKET" \
+  -p "a red apple on black velvet" \
+  -m mzbac/z-image-turbo-8bit \
+  -W 256 -H 256 -s 1 --no-progress \
+  -o /tmp/zimage-stage-2.png
+```
+
+Watch for these indicators in the daemon log:
+
+- the resident worker is reused for both requests
+- `Model already loaded, skipping load` appears on the matching requests
+- heavy-module load markers do not repeat unless the worker was evicted
+
+Current measured status from the March 13, 2026 validation run on the local cached `mzbac/z-image-turbo-8bit` profile:
+
+- daemon prewarm loaded the transformer once before serving
+- first staged `256x256`, `1`-step request completed in about `4s`
+- second matching request completed in about `1s`
+- daemon log counts:
+  - `Loading transformer`: `1`
+  - `Model already loaded, skipping load`: `2`
+  - `Reusing resident text worker`: `2`
+
 ### Numerical-Parity Work
 
 If you are chasing Swift vs Python or Diffusers drift, read:

@@ -32,9 +32,11 @@ public typealias ControlProgressCallback = @Sendable (ControlProgress) -> Void
 
 public struct ZImageControlRuntimeOptions: Sendable {
   public var logPhaseMemory: Bool
+  public var residencyPolicy: ModuleResidencyPolicy
 
-  public init(logPhaseMemory: Bool = false) {
+  public init(logPhaseMemory: Bool = false, residencyPolicy: ModuleResidencyPolicy = .oneShot) {
     self.logPhaseMemory = logPhaseMemory
+    self.residencyPolicy = residencyPolicy
   }
 }
 
@@ -181,7 +183,7 @@ public struct ZImageControlGenerationRequest {
   #endif
 }
 
-public class ZImageControlPipeline {
+public class ZImageControlPipeline: @unchecked Sendable {
   public enum PipelineError: Error {
     case notImplemented
     case tokenizerNotLoaded
@@ -223,6 +225,25 @@ public class ZImageControlPipeline {
   private var cachedPromptEmbedding: CachedPromptEmbedding?
   public init(logger: Logger = Logger(label: "z-image.control-pipeline")) {
     self.logger = logger
+  }
+
+  public func unloadModel() {
+    tokenizer = nil
+    vaeEncoder = nil
+    vaeDecoder = nil
+    transformer = nil
+    controlnet = nil
+    modelConfigs = nil
+    quantManifest = nil
+    snapshot = nil
+    loadedModelId = nil
+    loadedWeightsVariant = nil
+    loadedControlnetWeightsId = nil
+    currentLoRA = nil
+    currentLoRAConfig = nil
+    cachedPromptEmbedding = nil
+    Memory.clearCache()
+    logger.info("Control pipeline model unloaded from memory")
   }
 
   private func logControlMemory(_ phase: String, enabled: Bool) {
@@ -638,9 +659,16 @@ public class ZImageControlPipeline {
     return outputPath
   }
 
-  // swiftlint:disable:next cyclomatic_complexity
-  private func generateCore(_ request: ZImageControlGenerationRequest) async throws -> MLXArray {
-    let logPhaseMemory = request.runtimeOptions.logPhaseMemory
+  public func warm(_ request: ZImageControlGenerationRequest) async throws {
+    let (snapshot, modelConfigs, _) = try await ensureBaseModelLoaded(for: request)
+    try await ensureDenoiserLoaded(for: request, snapshot: snapshot, modelConfigs: modelConfigs)
+    _ = try prepareVAEDecoder(snapshot: snapshot, config: modelConfigs.vae)
+    Memory.clearCache()
+  }
+
+  private func ensureBaseModelLoaded(for request: ZImageControlGenerationRequest) async throws -> (
+    snapshot: URL, modelConfigs: ZImageModelConfigs, tokenizer: QwenTokenizer
+  ) {
     let requestedModelId = request.model ?? ZImageRepository.id
     let requestedWeightsVariant = ZImageFiles.normalizedWeightsVariant(request.weightsVariant)
     let requestedControlnetId = request.controlnetWeights
@@ -711,15 +739,68 @@ public class ZImageControlPipeline {
     } else {
       logger.info("Reusing cached model \(requestedModelId)")
     }
+
     if requestedControlnetId == nil, controlnet != nil || loadedControlnetWeightsId != nil {
       unloadControlnet()
     }
+
     guard let snapshot,
       let modelConfigs,
       let tokenizer
     else {
       throw PipelineError.transformerNotLoaded
     }
+
+    return (snapshot, modelConfigs, tokenizer)
+  }
+
+  private func ensureDenoiserLoaded(
+    for request: ZImageControlGenerationRequest,
+    snapshot: URL,
+    modelConfigs: ZImageModelConfigs
+  ) async throws {
+    let logPhaseMemory = request.runtimeOptions.logPhaseMemory
+    if transformer == nil {
+      logger.info("Loading transformer for denoising...")
+      let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
+      let transformerModel = PipelineUtilities.makeTransformer(config: modelConfigs.transformer)
+      let transformerWeights = try weightsMapper.loadTransformer()
+      ZImageWeightsMapping.applyTransformer(
+        weights: transformerWeights,
+        to: transformerModel,
+        manifest: quantManifest,
+        logger: logger
+      )
+      transformer = transformerModel
+      logControlMemory("transformer.denoising-load.after-apply", enabled: logPhaseMemory)
+      controlnet = nil
+      loadedControlnetWeightsId = nil
+      if let controlnetSpec = request.controlnetWeights {
+        logger.info("Loading controlnet weights for denoising from \(controlnetSpec)...")
+        controlnet = try await loadAppliedControlnet(
+          transformer: transformerModel,
+          transformerConfig: modelConfigs.transformer,
+          controlnetSpec: controlnetSpec,
+          preferredFile: request.controlnetWeightsFile,
+          progressCallback: request.progressCallback
+        )
+        logControlMemory("controlnet.denoising-load.after-apply", enabled: logPhaseMemory)
+      }
+      if let loraConfig = request.lora {
+        try await applyLoRAIfNeeded(loraConfig)
+      }
+    }
+
+    if transformer != nil {
+      try await applyLoRAIfNeeded(request.lora)
+    }
+  }
+
+  // swiftlint:disable:next cyclomatic_complexity
+  private func generateCore(_ request: ZImageControlGenerationRequest) async throws -> MLXArray {
+    let logPhaseMemory = request.runtimeOptions.logPhaseMemory
+    let residencyPolicy = request.runtimeOptions.residencyPolicy
+    let (snapshot, modelConfigs, tokenizer) = try await ensureBaseModelLoaded(for: request)
     let doCFG = PipelineUtilities.usesClassifierFreeGuidance(guidanceScale: request.guidanceScale)
     let promptEmbeds: MLXArray
     let negativeEmbeds: MLXArray?
@@ -844,9 +925,12 @@ public class ZImageControlPipeline {
           "Building control context (control=\(controlCG != nil), inpaint=\(inpaintCG != nil), mask=\(maskCG != nil))..."
         )
         let needsBaselineReduction = transformer != nil || controlnet != nil || hasLoRALoaded
-        if needsBaselineReduction {
+        if needsBaselineReduction && !residencyPolicy.keepsHeavyModulesResident {
           unloadTransformer()
         } else {
+          if needsBaselineReduction {
+            logger.info("Keeping transformer and controlnet resident for warm serving")
+          }
           Memory.clearCache()
         }
         logControlMemory("control-context.after-baseline-reduction", enabled: logPhaseMemory)
@@ -914,39 +998,7 @@ public class ZImageControlPipeline {
       mu: modelConfigs.scheduler.useDynamicShifting ? mu : nil
     )
     let timestepsArray = scheduler.timesteps.asArray(Float.self)
-    if transformer == nil {
-      logger.info("Loading transformer for denoising...")
-      let weightsMapper = ZImageWeightsMapper(snapshot: snapshot, weightsVariant: loadedWeightsVariant, logger: logger)
-      let transformerModel = PipelineUtilities.makeTransformer(config: modelConfigs.transformer)
-      let transformerWeights = try weightsMapper.loadTransformer()
-      ZImageWeightsMapping.applyTransformer(
-        weights: transformerWeights,
-        to: transformerModel,
-        manifest: quantManifest,
-        logger: logger
-      )
-      transformer = transformerModel
-      logControlMemory("transformer.denoising-load.after-apply", enabled: logPhaseMemory)
-      controlnet = nil
-      loadedControlnetWeightsId = nil
-      if let controlnetSpec = request.controlnetWeights {
-        logger.info("Loading controlnet weights for denoising from \(controlnetSpec)...")
-        controlnet = try await loadAppliedControlnet(
-          transformer: transformerModel,
-          transformerConfig: modelConfigs.transformer,
-          controlnetSpec: controlnetSpec,
-          preferredFile: request.controlnetWeightsFile,
-          progressCallback: request.progressCallback
-        )
-        logControlMemory("controlnet.denoising-load.after-apply", enabled: logPhaseMemory)
-      }
-      if let loraConfig = request.lora {
-        try await applyLoRAIfNeeded(loraConfig)
-      }
-    }
-    if transformer != nil {
-      try await applyLoRAIfNeeded(request.lora)
-    }
+    try await ensureDenoiserLoaded(for: request, snapshot: snapshot, modelConfigs: modelConfigs)
     logControlMemory("denoising.before-start", enabled: logPhaseMemory)
     logger.info("Running \(request.steps) denoising steps with control_context_scale=\(request.controlContextScale)...")
     do {
@@ -1027,7 +1079,9 @@ public class ZImageControlPipeline {
       transformer.clearCache()
       controlnet?.clearCache()
     }
-    unloadTransformer()
+    if residencyPolicy == .oneShot {
+      unloadTransformer()
+    }
     request.progressCallback?(
       ControlProgress(
         stage: "Denoising",
@@ -1052,8 +1106,12 @@ public class ZImageControlPipeline {
     )
     MLX.eval(decoded)
     logControlMemory("decode.after-eval", enabled: logPhaseMemory)
-    unloadVAEDecoder()
-    Memory.clearCache()
+    if residencyPolicy == .oneShot {
+      unloadVAEDecoder()
+      Memory.clearCache()
+    } else {
+      Memory.clearCache()
+    }
     return decoded
   }
 

@@ -44,7 +44,7 @@ If Xcode prompts about the MLX shader-preparation package plugin, allow it. For 
 Start the daemon:
 
 ```bash
-./ZImageServe serve
+./ZImageServe serve --residency-policy adaptive --warm-model mzbac/z-image-turbo-8bit
 ```
 
 Use a custom socket path when needed:
@@ -55,6 +55,15 @@ Use a custom socket path when needed:
 ```
 
 The ad hoc generation flags remain the same as `ZImageCLI`; only the executable name changes.
+
+Useful daemon flags:
+
+- `--residency-policy`: `one-shot`, `warm`, or `adaptive`; the default is `adaptive`
+- `--warm-model`: prewarm a text-to-image worker on startup
+- `--warm-controlnet-weights`, `--warm-control-file`: prewarm a control worker on startup
+- `--idle-timeout`: evict the resident worker after the specified idle interval
+
+The daemon now keeps a single resident worker profile by default. Matching staged requests reuse that worker until the profile changes, the idle timeout expires, or adaptive low-memory fallback evicts it.
 
 ## Text-To-Image
 

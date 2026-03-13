@@ -61,6 +61,10 @@ The library is pipeline-first:
 - `ZImageControlGenerationRequest` + `ZImageControlPipeline`
 
 Both request types expose CFG truncation and normalization controls in addition to the base guidance scale.
+They now also expose runtime residency controls:
+
+- `ZImageRuntimeOptions` on the text-to-image request
+- `ZImageControlRuntimeOptions` on the control request
 
 Current asymmetry to know about:
 
@@ -115,6 +119,11 @@ Weights-variant handling is part of the mapping layer, not just the downloader. 
 
 Source of truth: `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 
+Serving-specific note:
+
+- one-shot CLI requests keep the default `.oneShot` residency policy
+- staged requests can switch to `.warm` or `.adaptive` so the pipeline keeps text encoder, transformer, and VAE state resident across matching jobs
+
 ## ControlNet And Inpainting Flow
 
 `ZImageControlPipeline.generate(...)` adds:
@@ -130,6 +139,12 @@ Source of truth: `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 The CLI requires `--controlnet-weights` plus at least one of `--control-image`, `--inpaint-image`, or `--mask`. It also exposes the same `--lora` and `--enhance` knobs as the text-to-image command.
 
 Source of truth: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
+
+Serving-specific note:
+
+- the staging daemon keeps one resident worker profile by default
+- the control pipeline can now warm model, denoiser, and decoder state ahead of the first request
+- adaptive staged serving keeps that worker warm until the profile changes, idle eviction fires, or low-memory fallback evicts it
 
 ## Current Control-Memory Policy
 

@@ -15,6 +15,16 @@ private final class Box<T>: @unchecked Sendable {
 public enum CLICommandRunner {
   private static let defaultCacheLimit = Memory.cacheLimit
 
+  public struct TextExecutionPlan {
+    public let request: ZImageGenerationRequest
+    public let preset: ZImagePreset
+  }
+
+  public struct ControlExecutionPlan {
+    public let request: ZImageControlGenerationRequest
+    public let preset: ZImagePreset
+  }
+
   public static func run(_ command: CLIParsedCommand, logger: Logger, program: CLIProgramKind = .cli) throws {
     switch command {
     case .help(let usage):
@@ -52,8 +62,8 @@ public enum CLICommandRunner {
     logger: Logger,
     progressSink: (@Sendable (JobProgressUpdate) -> Void)? = nil
   ) async throws -> URL {
-    let plan = buildTextRequest(options, logger: logger)
-    applyCacheLimit(options.cacheLimit, logger: logger)
+    let plan = buildTextExecutionPlan(options, logger: logger)
+    configureCacheLimit(options.cacheLimit, logger: logger)
 
     let pipeline = ZImagePipeline(logger: logger)
     let progressRenderer = TerminalProgressRenderer(noProgress: options.noProgress, totalSteps: plan.preset.steps)
@@ -83,8 +93,8 @@ public enum CLICommandRunner {
     logger: Logger,
     progressSink: (@Sendable (JobProgressUpdate) -> Void)? = nil
   ) async throws -> URL {
-    let plan = try buildControlRequest(options, logger: logger)
-    applyCacheLimit(options.cacheLimit, logger: logger)
+    let plan = try buildControlExecutionPlan(options, logger: logger)
+    configureCacheLimit(options.cacheLimit, logger: logger)
 
     let pipeline = ZImageControlPipeline(logger: logger)
     let progressRenderer = TerminalProgressRenderer(noProgress: options.noProgress, totalSteps: plan.preset.steps)
@@ -228,9 +238,11 @@ public enum CLICommandRunner {
     }
   }
 
-  private static func buildTextRequest(_ options: TextGenerationOptions, logger: Logger) -> (
-    request: ZImageGenerationRequest, preset: ZImagePreset
-  ) {
+  public static func buildTextExecutionPlan(
+    _ options: TextGenerationOptions,
+    logger: Logger,
+    runtimeOptions: ZImageRuntimeOptions = .init()
+  ) -> TextExecutionPlan {
     let preset = ZImagePreset.resolved(
       for: options.model,
       width: options.width,
@@ -265,14 +277,17 @@ public enum CLICommandRunner {
       lora: loraConfig,
       enhancePrompt: options.enhancePrompt,
       enhanceMaxTokens: options.enhanceMaxTokens,
-      forceTransformerOverrideOnly: options.forceTransformerOverrideOnly
+      forceTransformerOverrideOnly: options.forceTransformerOverrideOnly,
+      runtimeOptions: runtimeOptions
     )
-    return (request, preset)
+    return TextExecutionPlan(request: request, preset: preset)
   }
 
-  private static func buildControlRequest(_ options: ControlGenerationOptions, logger: Logger) throws -> (
-    request: ZImageControlGenerationRequest, preset: ZImagePreset
-  ) {
+  public static func buildControlExecutionPlan(
+    _ options: ControlGenerationOptions,
+    logger: Logger,
+    runtimeOptions: ZImageControlRuntimeOptions = .init()
+  ) throws -> ControlExecutionPlan {
     let preset = ZImagePreset.resolved(
       for: options.model,
       width: options.width,
@@ -328,9 +343,12 @@ public enum CLICommandRunner {
       progressCallback: nil,
       enhancePrompt: options.enhancePrompt,
       enhanceMaxTokens: options.enhanceMaxTokens,
-      runtimeOptions: .init(logPhaseMemory: options.logControlMemory)
+      runtimeOptions: ZImageControlRuntimeOptions(
+        logPhaseMemory: runtimeOptions.logPhaseMemory || options.logControlMemory,
+        residencyPolicy: runtimeOptions.residencyPolicy
+      )
     )
-    return (request, preset)
+    return ControlExecutionPlan(request: request, preset: preset)
   }
 
   private static func validatedOptionalFileURL(path: String?, missingMessage: String) throws -> URL? {
@@ -342,7 +360,7 @@ public enum CLICommandRunner {
     return url
   }
 
-  private static func applyCacheLimit(_ cacheLimit: Int?, logger: Logger) {
+  public static func configureCacheLimit(_ cacheLimit: Int?, logger: Logger) {
     if let limit = cacheLimit {
       Memory.cacheLimit = limit * 1024 * 1024
       logger.info("GPU cache limit set to \(limit)MB")

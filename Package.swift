@@ -46,7 +46,7 @@ let package = Package(
     ),
     .target(
       name: "ZImageServeCore",
-      dependencies: ["ZImageCLICommon"],
+      dependencies: ["ZImage", "ZImageCLICommon"],
       path: "Sources/ZImageServeCore"
     ),
     .executableTarget(

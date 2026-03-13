@@ -2,6 +2,7 @@ import Darwin
 import Dispatch
 import Foundation
 import Logging
+import ZImage
 import ZImageCLICommon
 
 private final class AsyncBox<T>: @unchecked Sendable {
@@ -10,6 +11,42 @@ private final class AsyncBox<T>: @unchecked Sendable {
   init(_ value: T) {
     self.value = value
   }
+}
+
+private enum WorkerKind: String, Sendable {
+  case text
+  case control
+}
+
+private struct WorkerProfile: Hashable, Sendable {
+  var kind: WorkerKind
+  var model: String?
+  var weightsVariant: String?
+  var controlnetWeights: String?
+  var controlnetFile: String?
+  var maxSequenceLength: Int
+  var residencyPolicy: ModuleResidencyPolicy
+  var forceTransformerOverrideOnly: Bool
+}
+
+private enum ResidentWorker: Sendable {
+  case text(TextServeWorker)
+  case control(ControlServeWorker)
+
+  func unload() async {
+    switch self {
+    case .text(let worker):
+      await worker.unload()
+    case .control(let worker):
+      await worker.unload()
+    }
+  }
+}
+
+private struct ResidentWorkerState: Sendable {
+  var profile: WorkerProfile
+  var worker: ResidentWorker
+  var lastUsedAt: Date
 }
 
 public final class ServiceClient {
@@ -48,24 +85,34 @@ public final class ServiceClient {
 }
 
 public final class StagingServiceDaemon {
+  private let options: ServeOptions
   private let socketPath: String
   private let logger: Logger
   private let coordinator: SerialServiceCoordinator
 
   public init(options: ServeOptions, logger: Logger) {
+    self.options = options
     self.socketPath = ServiceSocketPath.resolve(options.socketPath)
     self.logger = logger
-    self.coordinator = SerialServiceCoordinator(logger: logger)
+    self.coordinator = SerialServiceCoordinator(options: options, logger: logger)
   }
 
   public func run() throws {
     let serverFD = try UnixDomainSocket.makeServerSocket(path: socketPath)
+    let idleTimer = makeIdleTimer()
     defer {
+      idleTimer.cancel()
       close(serverFD)
       unlink(socketPath)
     }
 
-    logger.info("Staging daemon listening on \(socketPath)")
+    let coordinator = self.coordinator
+    try waitForAsync {
+      try await coordinator.prewarmIfNeeded()
+    }
+
+    logger.info(
+      "Staging daemon listening on \(socketPath) with residency policy \(options.residencyPolicy.rawValue)")
 
     while true {
       let connection: SocketConnection
@@ -88,6 +135,19 @@ public final class StagingServiceDaemon {
         logger.error("\(CLIErrors.describe(error))")
       }
     }
+  }
+
+  private func makeIdleTimer() -> DispatchSourceTimer {
+    let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+    timer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1))
+    let coordinator = self.coordinator
+    timer.setEventHandler {
+      try? waitForAsync {
+        await coordinator.evictIdleWorkerIfNeeded(now: Date())
+      }
+    }
+    timer.resume()
+    return timer
   }
 
   private static func handleConnection(
@@ -136,12 +196,25 @@ private func waitForAsync(_ operation: @escaping @Sendable () async throws -> Vo
 }
 
 actor SerialServiceCoordinator {
+  private static let adaptiveMinimumAvailableMemoryBytes: UInt64 = 8 * 1024 * 1024 * 1024
+
+  private let options: ServeOptions
   private let logger: Logger
   private var isBusy = false
+  private var isExecuting = false
   private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var residentWorker: ResidentWorkerState?
 
-  init(logger: Logger) {
+  init(options: ServeOptions, logger: Logger) {
+    self.options = options
     self.logger = logger
+  }
+
+  func prewarmIfNeeded() async throws {
+    guard let profile = warmProfile() else { return }
+    logger.info("Prewarming \(profile.kind.rawValue) worker for model \(profile.model ?? ZImageRepository.id)")
+    let worker = try await makeWorker(for: profile)
+    residentWorker = .init(profile: profile, worker: worker, lastUsedAt: Date())
   }
 
   func submit(
@@ -159,7 +232,9 @@ actor SerialServiceCoordinator {
       isBusy = true
     }
 
+    isExecuting = true
     defer {
+      isExecuting = false
       if waiters.isEmpty {
         isBusy = false
       } else {
@@ -169,19 +244,270 @@ actor SerialServiceCoordinator {
     }
 
     let job = try submission.job.asPayload()
+    let profile = profile(for: job)
+    let worker = try await ensureWorker(for: profile)
+
     do {
-      let outputURL = try await CLICommandRunner.executeGenerationJob(
-        job,
-        logger: logger,
-        progressSink: { update in
+      let outputURL: URL
+      switch (worker, job) {
+      case (.text(let worker), .text(let options)):
+        outputURL = try await worker.execute(options) { update in
           try? eventSink(.init(type: .progress, jobID: submission.jobID, progress: update))
         }
-      )
+      case (.control(let worker), .control(let options)):
+        outputURL = try await worker.execute(options) { update in
+          try? eventSink(.init(type: .progress, jobID: submission.jobID, progress: update))
+        }
+      default:
+        throw ServiceTransportError.invalidMessage("Worker profile does not match submitted job")
+      }
+      residentWorker?.lastUsedAt = Date()
       try eventSink(.init(type: .completed, jobID: submission.jobID, outputPath: outputURL.path))
     } catch {
-      try eventSink(
-        .init(type: .failed, jobID: submission.jobID, message: CLIErrors.describe(error))
+      try eventSink(.init(type: .failed, jobID: submission.jobID, message: CLIErrors.describe(error)))
+    }
+  }
+
+  func evictIdleWorkerIfNeeded(now: Date) async {
+    guard !isExecuting, let residentWorker else { return }
+    guard residentWorker.profile.residencyPolicy.keepsHeavyModulesResident else { return }
+    guard options.idleTimeoutSeconds > 0 else { return }
+
+    let idleDuration = now.timeIntervalSince(residentWorker.lastUsedAt)
+    guard idleDuration >= options.idleTimeoutSeconds else { return }
+
+    logger.info(
+      "Evicting idle \(residentWorker.profile.kind.rawValue) worker after \(Int(idleDuration.rounded()))s")
+    await residentWorker.worker.unload()
+    self.residentWorker = nil
+  }
+
+  private func ensureWorker(for profile: WorkerProfile) async throws -> ResidentWorker {
+    if let residentWorker {
+      if residentWorker.profile == profile {
+        if shouldEvictAdaptiveWorker(profile: profile) {
+          logger.info("Evicting adaptive worker before reuse due to low available memory")
+          await residentWorker.worker.unload()
+          self.residentWorker = nil
+        } else {
+          logger.info("Reusing resident \(profile.kind.rawValue) worker")
+          self.residentWorker?.lastUsedAt = Date()
+          return residentWorker.worker
+        }
+      } else {
+        logger.info("Switching resident worker profile")
+        await residentWorker.worker.unload()
+        self.residentWorker = nil
+      }
+    }
+
+    let worker = try await makeWorker(for: profile)
+    residentWorker = .init(profile: profile, worker: worker, lastUsedAt: Date())
+    return worker
+  }
+
+  private func makeWorker(for profile: WorkerProfile) async throws -> ResidentWorker {
+    switch profile.kind {
+    case .text:
+      let worker = TextServeWorker(profile: profile, logger: logger)
+      try await worker.prewarm()
+      return .text(worker)
+    case .control:
+      let worker = ControlServeWorker(profile: profile, logger: logger)
+      try await worker.prewarm()
+      return .control(worker)
+    }
+  }
+
+  private func shouldEvictAdaptiveWorker(profile: WorkerProfile) -> Bool {
+    guard profile.residencyPolicy == .adaptive else { return false }
+    let availableMemory = SystemMemory.availableBytes()
+    guard availableMemory > 0 else { return false }
+    return availableMemory < Self.adaptiveMinimumAvailableMemoryBytes
+  }
+
+  private func warmProfile() -> WorkerProfile? {
+    if let warmControlnetWeights = options.warmControlnetWeights {
+      return WorkerProfile(
+        kind: .control,
+        model: options.warmModel,
+        weightsVariant: options.warmWeightsVariant,
+        controlnetWeights: warmControlnetWeights,
+        controlnetFile: options.warmControlnetFile,
+        maxSequenceLength: options.warmMaxSequenceLength,
+        residencyPolicy: options.residencyPolicy,
+        forceTransformerOverrideOnly: false
       )
     }
+
+    guard options.warmModel != nil else { return nil }
+    return WorkerProfile(
+      kind: .text,
+      model: options.warmModel,
+      weightsVariant: options.warmWeightsVariant,
+      controlnetWeights: nil,
+      controlnetFile: nil,
+      maxSequenceLength: options.warmMaxSequenceLength,
+      residencyPolicy: options.residencyPolicy,
+      forceTransformerOverrideOnly: false
+    )
+  }
+
+  private func profile(for job: GenerationJobPayload) -> WorkerProfile {
+    switch job {
+    case .text(let options):
+      return WorkerProfile(
+        kind: .text,
+        model: options.model,
+        weightsVariant: options.weightsVariant,
+        controlnetWeights: nil,
+        controlnetFile: nil,
+        maxSequenceLength: options.maxSequenceLength ?? 512,
+        residencyPolicy: self.options.residencyPolicy,
+        forceTransformerOverrideOnly: options.forceTransformerOverrideOnly
+      )
+    case .control(let options):
+      return WorkerProfile(
+        kind: .control,
+        model: options.model,
+        weightsVariant: options.weightsVariant,
+        controlnetWeights: options.controlnetWeights,
+        controlnetFile: options.controlnetWeightsFile,
+        maxSequenceLength: options.maxSequenceLength ?? 512,
+        residencyPolicy: self.options.residencyPolicy,
+        forceTransformerOverrideOnly: false
+      )
+    }
+  }
+}
+
+private actor TextServeWorker {
+  private let profile: WorkerProfile
+  private let logger: Logger
+  private let pipeline: ZImagePipeline
+
+  init(profile: WorkerProfile, logger: Logger) {
+    self.profile = profile
+    self.logger = logger
+    self.pipeline = ZImagePipeline(logger: logger)
+  }
+
+  func prewarm() async throws {
+    let request = ZImageGenerationRequest(
+      prompt: "",
+      model: profile.model,
+      weightsVariant: profile.weightsVariant,
+      maxSequenceLength: profile.maxSequenceLength,
+      forceTransformerOverrideOnly: profile.forceTransformerOverrideOnly,
+      runtimeOptions: .init(residencyPolicy: profile.residencyPolicy)
+    )
+    try await pipeline.warm(request)
+  }
+
+  func execute(
+    _ options: TextGenerationOptions,
+    progressSink: @escaping @Sendable (JobProgressUpdate) -> Void
+  ) async throws -> URL {
+    let plan = CLICommandRunner.buildTextExecutionPlan(
+      options,
+      logger: logger,
+      runtimeOptions: .init(residencyPolicy: profile.residencyPolicy)
+    )
+    CLICommandRunner.configureCacheLimit(options.cacheLimit, logger: logger)
+    return try await pipeline.generate(
+      plan.request,
+      progressHandler: { progress in
+        guard progress.stage == .denoising else { return }
+        progressSink(
+          JobProgressUpdate(
+            stage: progress.stage.rawValue,
+            stepIndex: progress.stepIndex,
+            totalSteps: progress.totalSteps,
+            fractionCompleted: progress.fractionCompleted
+          ))
+      })
+  }
+
+  func unload() {
+    pipeline.unloadModel()
+  }
+}
+
+private actor ControlServeWorker {
+  private let profile: WorkerProfile
+  private let logger: Logger
+  private let pipeline: ZImageControlPipeline
+
+  init(profile: WorkerProfile, logger: Logger) {
+    self.profile = profile
+    self.logger = logger
+    self.pipeline = ZImageControlPipeline(logger: logger)
+  }
+
+  func prewarm() async throws {
+    let request = ZImageControlGenerationRequest(
+      prompt: "",
+      model: profile.model,
+      weightsVariant: profile.weightsVariant,
+      controlnetWeights: profile.controlnetWeights,
+      controlnetWeightsFile: profile.controlnetFile,
+      maxSequenceLength: profile.maxSequenceLength,
+      runtimeOptions: .init(residencyPolicy: profile.residencyPolicy)
+    )
+    try await pipeline.warm(request)
+  }
+
+  func execute(
+    _ options: ControlGenerationOptions,
+    progressSink: @escaping @Sendable (JobProgressUpdate) -> Void
+  ) async throws -> URL {
+    let plan = try CLICommandRunner.buildControlExecutionPlan(
+      options,
+      logger: logger,
+      runtimeOptions: .init(residencyPolicy: profile.residencyPolicy)
+    )
+    CLICommandRunner.configureCacheLimit(options.cacheLimit, logger: logger)
+
+    var request = plan.request
+    request.progressCallback = { progress in
+      if progress.stage == "Denoising" {
+        progressSink(
+          JobProgressUpdate(
+            stage: progress.stage,
+            stepIndex: progress.stepIndex,
+            totalSteps: progress.totalSteps,
+            fractionCompleted: progress.fractionCompleted
+          ))
+      } else if let enhancedPrompt = progress.enhancedPrompt {
+        progressSink(
+          JobProgressUpdate(
+            stage: progress.stage,
+            stepIndex: progress.stepIndex,
+            totalSteps: progress.totalSteps,
+            fractionCompleted: progress.fractionCompleted,
+            enhancedPrompt: enhancedPrompt
+          ))
+      }
+    }
+    return try await pipeline.generate(request)
+  }
+
+  func unload() {
+    pipeline.unloadModel()
+  }
+}
+
+private enum SystemMemory {
+  static func availableBytes() -> UInt64 {
+    var stats = vm_statistics64()
+    var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
+    let result = withUnsafeMutablePointer(to: &stats) {
+      $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+      }
+    }
+    guard result == KERN_SUCCESS else { return 0 }
+    let pageSize = UInt64(sysconf(_SC_PAGESIZE))
+    return UInt64(stats.free_count) * pageSize
   }
 }

@@ -27,6 +27,7 @@ public struct ZImageGenerationRequest: Sendable {
 
   public var enhanceMaxTokens: Int
   public var forceTransformerOverrideOnly: Bool
+  public var runtimeOptions: ZImageRuntimeOptions
 
   public init(
     prompt: String,
@@ -45,7 +46,8 @@ public struct ZImageGenerationRequest: Sendable {
     lora: LoRAConfiguration? = nil,
     enhancePrompt: Bool = false,
     enhanceMaxTokens: Int = 512,
-    forceTransformerOverrideOnly: Bool = false
+    forceTransformerOverrideOnly: Bool = false,
+    runtimeOptions: ZImageRuntimeOptions = .init()
   ) {
     self.prompt = prompt
     self.negativePrompt = negativePrompt
@@ -64,10 +66,11 @@ public struct ZImageGenerationRequest: Sendable {
     self.enhancePrompt = enhancePrompt
     self.enhanceMaxTokens = enhanceMaxTokens
     self.forceTransformerOverrideOnly = forceTransformerOverrideOnly
+    self.runtimeOptions = runtimeOptions
   }
 }
 
-public final class ZImagePipeline {
+public final class ZImagePipeline: @unchecked Sendable {
   public enum PipelineError: Error, Sendable {
     case notImplemented
     case tokenizerNotLoaded
@@ -637,6 +640,30 @@ public final class ZImagePipeline {
     currentLoRAConfig
   }
 
+  public func warm(_ request: ZImageGenerationRequest, progressHandler: ProgressHandler? = nil) async throws {
+    let selection = try resolveModelSelection(
+      request.model, forceTransformerOverrideOnly: request.forceTransformerOverrideOnly)
+    try await loadModel(
+      modelSpec: selection.baseModelSpec,
+      weightsVariant: request.weightsVariant,
+      aioCheckpointURL: selection.aioCheckpointURL,
+      aioTextEncoderPrefix: selection.aioTextEncoderPrefix,
+      progressHandler: progressHandler
+    )
+
+    if selection.aioCheckpointURL == nil {
+      try applyTransformerOverrideIfNeeded(selection.transformerOverrideURL)
+    }
+
+    if let loraConfig = request.lora {
+      if currentLoRAConfig != loraConfig {
+        try await loadLoRA(loraConfig, progressHandler: progressHandler)
+      }
+    } else if currentLoRA != nil {
+      unloadLoRA()
+    }
+  }
+
   public func generate(_ request: ZImageGenerationRequest, progressHandler: ProgressHandler? = nil) async throws -> URL
   {
     logger.info("Requested Z-Image generation")
@@ -676,15 +703,11 @@ public final class ZImagePipeline {
       throw PipelineError.invalidDimensions(
         "Height must be divisible by \(vaeScale) (got \(request.height)). Please adjust to a multiple of \(vaeScale).")
     }
+    let residencyPolicy = request.runtimeOptions.residencyPolicy
+    try await warm(request, progressHandler: progressHandler)
+
     let selection = try resolveModelSelection(
       request.model, forceTransformerOverrideOnly: request.forceTransformerOverrideOnly)
-    try await loadModel(
-      modelSpec: selection.baseModelSpec,
-      weightsVariant: request.weightsVariant,
-      aioCheckpointURL: selection.aioCheckpointURL,
-      aioTextEncoderPrefix: selection.aioTextEncoderPrefix,
-      progressHandler: progressHandler
-    )
 
     guard let vae,
       let modelConfigs
@@ -751,8 +774,10 @@ public final class ZImagePipeline {
       }
     }
     logger.info("Text encoding complete")
-    textEncoder = nil
-    Memory.clearCache()
+    if residencyPolicy == .oneShot {
+      textEncoder = nil
+      Memory.clearCache()
+    }
 
     let vaeDivisor = modelConfigs.vae.latentDivisor
     let latentH = max(1, request.height / vaeDivisor)
@@ -831,7 +856,9 @@ public final class ZImagePipeline {
     }
 
     progressHandler?(GenerationProgress(stage: .denoising, stepIndex: request.steps, totalSteps: request.steps))
-    unloadTransformer()
+    if residencyPolicy == .oneShot {
+      unloadTransformer()
+    }
     logger.info("Denoising complete, decoding with VAE...")
     progressHandler?(GenerationProgress(stage: .decoding, stepIndex: request.steps, totalSteps: request.steps))
 

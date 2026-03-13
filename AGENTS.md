@@ -27,7 +27,7 @@ This guide is for agents working inside `zimage.swift`. Treat the code and tests
 - `Sources/ZImageServeCore/`
   - local socket transport and serial daemon coordination
 - `Sources/ZImage/`
-  - `Pipeline/`: `ZImagePipeline`, `ZImageControlPipeline`, scheduler wiring, snapshot helpers
+  - `Pipeline/`: `ZImagePipeline`, `ZImageControlPipeline`, `RuntimeOptions.swift`, scheduler wiring, snapshot helpers
   - `Model/`: Qwen text encoder, diffusion transformer, VAE
   - `Weights/`: cache lookup, Hugging Face download, safetensors reading, AIO detection, tensor mapping
   - `Quantization/`: quantization manifest format and quantize commands
@@ -49,6 +49,7 @@ This guide is for agents working inside `zimage.swift`. Treat the code and tests
 - CLI flags and help output: `Sources/ZImageCLICommon/`
 - Text-to-image API: `Sources/ZImage/Pipeline/ZImagePipeline.swift`
 - ControlNet and inpainting API: `Sources/ZImage/Pipeline/ZImageControlPipeline.swift`
+- Serving residency policy surface: `Sources/ZImage/Pipeline/RuntimeOptions.swift`
 - Known model ids and presets: `Sources/ZImage/Support/ZImageModelRegistry.swift`
 - Default model id and weight-file resolution: `Sources/ZImage/Weights/ModelPaths.swift`
 - Snapshot resolution, cache lookup, and Hugging Face download behavior: `Sources/ZImage/Weights/ModelResolution.swift` and `Sources/ZImage/Weights/HuggingFaceHub.swift`

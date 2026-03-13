@@ -149,7 +149,7 @@ ControlNet:
 Staging daemon:
 
 ```bash
-./ZImageServe serve
+./ZImageServe serve --residency-policy adaptive --warm-model mzbac/z-image-turbo-8bit
 ./ZImageServe -p "a neon-lit alley in the rain" -o staged.png
 ```
 
