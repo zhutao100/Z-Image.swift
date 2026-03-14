@@ -178,33 +178,12 @@ enum ZImageServe {
   }
 
   private static func makeClientRenderer(for job: GenerationJobPayload) -> TerminalProgressRenderer {
-    let noProgress: Bool
-    let totalSteps: Int
     switch job {
     case .text(let options):
-      let preset = ZImagePreset.resolved(
-        for: options.model,
-        width: options.width,
-        height: options.height,
-        steps: options.steps,
-        guidanceScale: options.guidance,
-        maxSequenceLength: options.maxSequenceLength
-      )
-      noProgress = options.noProgress
-      totalSteps = preset.steps
+      return TerminalProgressRenderer(noProgress: options.noProgress)
     case .control(let options):
-      let preset = ZImagePreset.resolved(
-        for: options.model,
-        width: options.width,
-        height: options.height,
-        steps: options.steps,
-        guidanceScale: options.guidance,
-        maxSequenceLength: options.maxSequenceLength
-      )
-      noProgress = options.noProgress
-      totalSteps = preset.steps
+      return TerminalProgressRenderer(noProgress: options.noProgress)
     }
-    return TerminalProgressRenderer(noProgress: noProgress, totalSteps: totalSteps)
   }
 
   private static func renderStatus(_ snapshot: ServiceStatusSnapshot) -> String {

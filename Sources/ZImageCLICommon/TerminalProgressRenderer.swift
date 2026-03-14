@@ -3,36 +3,48 @@ import Foundation
 
 public final class TerminalProgressRenderer: @unchecked Sendable {
   private let enabled: Bool
-  private let totalSteps: Int
+  private let usesTTY: Bool
   private var bar: ProgressBar?
   private var plainProgress: PlainProgress?
 
-  public init(noProgress: Bool, totalSteps: Int) {
+  public init(noProgress: Bool) {
     enabled = !noProgress
-    self.totalSteps = max(1, totalSteps)
+    usesTTY = enabled && isatty(STDERR_FILENO) != 0
     guard enabled else { return }
-    if isatty(STDERR_FILENO) != 0 {
-      bar = ProgressBar(total: totalSteps)
-    } else {
+    if !usesTTY {
       plainProgress = PlainProgress.shared
     }
   }
 
   public func report(_ update: JobProgressUpdate) {
-    guard enabled, update.totalSteps > 0 else { return }
-    let completed = min(update.totalSteps, max(0, update.stepIndex))
-    if let bar {
-      bar.update(completed: completed)
-      if completed == update.totalSteps {
+    guard enabled, let display = DisplayProgress(update: update) else { return }
+    if usesTTY {
+      if bar == nil {
+        bar = ProgressBar(total: display.total)
+      }
+      guard let bar else { return }
+      bar.update(completed: display.completed, total: display.total)
+      if display.completed == display.total {
         bar.finish(forceNewline: true)
       }
     } else if let plainProgress {
-      plainProgress.report(completed: completed, total: totalSteps)
+      plainProgress.report(completed: display.completed, total: display.total)
     }
   }
 
   public func finish() {
     bar?.finish(forceNewline: true)
+  }
+}
+
+struct DisplayProgress: Equatable {
+  let completed: Int
+  let total: Int
+
+  init?(update: JobProgressUpdate) {
+    guard update.totalSteps > 0 else { return nil }
+    total = max(1, update.totalSteps)
+    completed = min(total, max(0, update.stepIndex))
   }
 }
 
@@ -63,7 +75,7 @@ private final class PlainProgress: @unchecked Sendable {
 }
 
 private final class ProgressBar: @unchecked Sendable {
-  private let total: Int
+  private var total: Int
   private var lastStepTime: Date?
   private var postWarmupDurations: [Double] = []
   private let windowSize = 5
@@ -74,8 +86,13 @@ private final class ProgressBar: @unchecked Sendable {
     self.total = max(1, total)
   }
 
-  func update(completed: Int) {
+  func update(completed: Int, total: Int) {
     if isFinished { return }
+    let resolvedTotal = max(1, total)
+    if resolvedTotal != self.total {
+      self.total = resolvedTotal
+      lastRenderedPercent = -1
+    }
     let now = Date()
     if let last = lastStepTime {
       let dt = now.timeIntervalSince(last)

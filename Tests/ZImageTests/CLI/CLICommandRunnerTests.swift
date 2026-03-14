@@ -24,6 +24,34 @@ final class CLICommandRunnerTests: XCTestCase {
     XCTAssertTrue(store.messages.contains { $0.contains("Auto-applying known adapter recipe") })
   }
 
+  func testBuildControlExecutionPlanAutoAppliesKnownDistillRecipeWhenUnset() throws {
+    let store = TestLogStore()
+    let logger = Logger(label: "test.control-auto-apply") { _ in TestLogHandler(store: store) }
+    let controlImageURL = try makeTemporaryFile(named: "control.png")
+    defer {
+      try? FileManager.default.removeItem(at: controlImageURL)
+    }
+
+    let plan = try CLICommandRunner.buildControlExecutionPlan(
+      ControlGenerationOptions(
+        prompt: "a leopard in the jungle",
+        controlImage: controlImageURL.path,
+        controlnetWeights: "alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1",
+        controlnetWeightsFile: "Z-Image-Fun-Controlnet-Union-2.1.safetensors",
+        outputPath: "control.png",
+        model: "Tongyi-MAI/Z-Image",
+        loraPath: "alibaba-pai/Z-Image-Fun-Lora-Distill",
+        loraFile: "Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors"
+      ),
+      logger: logger
+    )
+
+    XCTAssertEqual(plan.request.steps, 8)
+    XCTAssertEqual(plan.request.guidanceScale, 1.0, accuracy: 0.0001)
+    XCTAssertEqual(Double(plan.request.lora?.scale ?? -1), 0.8, accuracy: 0.0001)
+    XCTAssertTrue(store.messages.contains { $0.contains("Auto-applying known adapter recipe") })
+  }
+
   func testDistillAdapterWarningMentionsExplicitOverrides() {
     let warning = CLICommandRunner.loraSamplingWarning(
       loraConfig: .huggingFace(
@@ -71,6 +99,12 @@ final class CLICommandRunnerTests: XCTestCase {
     XCTAssertNotNil(warning)
     XCTAssertTrue(warning?.contains("Using model defaults with LoRA") == true)
   }
+}
+
+private func makeTemporaryFile(named name: String) throws -> URL {
+  let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)-\(name)")
+  try Data().write(to: url)
+  return url
 }
 
 private final class TestLogStore: @unchecked Sendable {

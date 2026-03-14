@@ -66,7 +66,7 @@ public enum CLICommandRunner {
     configureCacheLimit(options.cacheLimit, logger: logger)
 
     let pipeline = ZImagePipeline(logger: logger)
-    let progressRenderer = TerminalProgressRenderer(noProgress: options.noProgress, totalSteps: plan.preset.steps)
+    let progressRenderer = TerminalProgressRenderer(noProgress: options.noProgress)
 
     defer {
       progressRenderer.finish()
@@ -97,7 +97,7 @@ public enum CLICommandRunner {
     configureCacheLimit(options.cacheLimit, logger: logger)
 
     let pipeline = ZImageControlPipeline(logger: logger)
-    let progressRenderer = TerminalProgressRenderer(noProgress: options.noProgress, totalSteps: plan.preset.steps)
+    let progressRenderer = TerminalProgressRenderer(noProgress: options.noProgress)
 
     defer {
       progressRenderer.finish()
