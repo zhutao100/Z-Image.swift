@@ -40,6 +40,9 @@ Known ids, inspectable local or cached snapshots, and common Z-Image-style alias
 |--------|--------|
 | A dramatic, cinematic japanese-action scene in a edo era Kyoto city. A woman named Harley Quinn from the movie "Birds of Prey" in colorful, punk-inspired comic-villain attire walks confidently while holding the arm of a serious-looking man named John Wick played by Keanu Reeves from the fantastic film John Wick 2 in a black suit, her t-shirt says "Birds of Prey", the characters are capture in a postcard held by a hand in front of a beautiful realistic city at sunset and there is cursive writing that says "Z-Image-Turbo, Now in MLX" | ![Output](examples/z-image-turbo.png) |
 
+Note:
+- generated with `--negative-prompt "卡通,油画质感,低分辨率,塑料材质,光滑"`
+- generated with the default Turbo settings: `--steps 9 --guidance 0.0`
 
 > Z-Image (Base)
 
@@ -49,33 +52,48 @@ Known ids, inspectable local or cached snapshots, and common Z-Image-style alias
 
 Note:
 - generated with `--negative-prompt "卡通,油画质感,低分辨率,塑料材质,光滑"`
+- generated with the default Base settings: `--steps 50 --guidance 4.0`
 
+### LoRA/LoKr Examples
 
-### LoRA/LoKr Examples (Z-Image-Turbo)
+#### Z-Image with the with Distill LoRA `alibaba-pai/Z-Image-Fun-Lora-Distill`
 
-#### LoKr adapter `F16/z-image-turbo-flow-dpo`
+| Prompt | Output |
+|--------|--------|
+| A dramatic, cinematic japanese-action scene in a edo era Kyoto city. A woman named Harley Quinn from the movie "Birds of Prey" in colorful, punk-inspired comic-villain attire walks confidently while holding the arm of a serious-looking man named John Wick played by Keanu Reeves from the fantastic film John Wick 2 in a black suit, her t-shirt says "Birds of Prey", the characters are capture in a postcard held by a hand in front of a beautiful realistic city at sunset and there is cursive writing that says "Z-Image-Turbo, Now in MLX" | ![Output](examples/z-image-distill.png) |
+
+Note:
+- generated with `--negative-prompt "卡通,油画质感,低分辨率,塑料材质,光滑"`
+- generated with the Distill LoRA's recommended recipe: `--steps 8 --guidance 1.0 --lora-scale 0.8`
+
+####  Z-Image-Turbo with LoKr `F16/z-image-turbo-flow-dpo`
 
 | Prompt | Output |
 |--------|--------|
 | A dramatic, cinematic japanese-action scene in a edo era Kyoto city. A woman named Harley Quinn from the movie "Birds of Prey" in colorful, punk-inspired comic-villain attire walks confidently while holding the arm of a serious-looking man named John Wick played by Keanu Reeves from the fantastic film John Wick 2 in a black suit, her t-shirt says "Birds of Prey", the characters are capture in a postcard held by a hand in front of a beautiful realistic city at sunset and there is cursive writing that says "Z-Image-Turbo, Now in MLX" | ![Output](examples/z-image-turbo-lokr.png) |
 
 Note:
-- generated with `--negative-prompt "卡通,油画质感,低分辨率,毛绒材质,塑料材质,光滑"` and `--steps 9 --guidance 1.0`
+- generated with `--negative-prompt "卡通,油画质感,低分辨率,毛绒材质,塑料材质,光滑"` and the Turbo default setting: `--steps 9`
+- generated with the adapter's recommended recipe: `--guidance 1.0`
 
-### ControlNet Examples (Z-Image-Turbo)
+### ControlNet Examples (Z-Image-Turbo, and Z-Image with Distill LoRA)
 
-| Control Type | Prompt | Control Image | Output |
-|--------------|--------|---------------|--------|
-| Canny | A hyper-realistic close-up portrait of a leopard face hiding behind dense green jungle leaves, camouflaged, direct eye contact, intricate fur detail, bright yellow eyes, cinematic lighting, soft shadows, National Geographic photography, 8k, sharp focus, depth of field | ![Canny](images/canny.jpg) | ![Canny Output](examples/canny.png) |
-| HED | A photorealistic film still of a man in a dark shirt sitting at a dining table in a modern kitchen at night, looking down at a bowl of soup. A glass bottle and a glass of white wine are in the foreground. Warm, low, cinematic lighting, soft shadows, shallow depth of field, contemplative atmosphere, highly detailed. | ![HED](images/hed.jpg) | ![HED Output](examples/hed.png) |
-| Depth | A hyperrealistic architectural photograph of a spacious, minimalist modern hallway interior. Large floor-to-ceiling windows on the right wall fill the space with bright natural daylight. A light gray sectional sofa and a low, modern coffee table are placed in the foreground on a light wood floor. A large potted plant is visible further down the hallway. Besides the plant, the hallway extends into the darkness, suggesting further space. White walls, clean lines, serene atmosphere, highly detailed, 8k resolution, cinematic lighting | ![Depth](images/depth.jpg) | ![Depth Output](examples/depth.png) |
-| Pose | 一位年轻女子站在阳光明媚的海岸线上，白裙在轻拂的海风中微微飘动。她拥有一头鲜艳的紫色长发，在风中轻盈舞动... | ![Pose](images/pose.jpg) | ![Pose Output](examples/pose.png) |
+| Control Type | Prompt | Control Image | Turbo Output | Distill Output |
+|--------------|--------|---------------|--------------|----------------|
+| Canny | A hyper-realistic close-up portrait of a leopard face hiding behind dense green jungle leaves, camouflaged, direct eye contact, intricate fur detail, bright yellow eyes, cinematic lighting, soft shadows, National Geographic photography, 8k, sharp focus, depth of field | ![Canny](images/canny.jpg) | ![Canny Turbo Output](examples/z-image-turbo-control-canny.png) | ![Canny Distill Output](examples/z-image-distill-control-canny.png) |
+| HED | A photorealistic film still of a man in a dark shirt sitting at a dining table in a modern kitchen at night, looking down at a bowl of soup. A glass bottle and a glass of white wine are in the foreground. Warm, low, cinematic lighting, soft shadows, shallow depth of field, contemplative atmosphere, highly detailed. | ![HED](images/hed.jpg) | ![HED Turbo Output](examples/z-image-turbo-control-hed.png) | ![HED Distill Output](examples/z-image-distill-control-hed.png) |
+| Depth | A hyperrealistic architectural photograph of a spacious, minimalist modern hallway interior. Large floor-to-ceiling windows on the right wall fill the space with bright natural daylight. A light gray sectional sofa and a low, modern coffee table are placed in the foreground on a light wood floor. A large potted plant is visible further down the hallway. Besides the plant, the hallway extends into the darkness, suggesting further space. White walls, clean lines, serene atmosphere, highly detailed, 8k resolution, cinematic lighting | ![Depth](images/depth.jpg) | ![Depth Turbo Output](examples/z-image-turbo-control-depth.png) | ![Depth Distill Output](examples/z-image-distill-control-depth.png) |
+| Pose | 一位年轻女子站在阳光明媚的海岸线上，白裙在轻拂的海风中微微飘动。她拥有一头鲜艳的紫色长发，在风中轻盈舞动... | ![Pose](images/pose.jpg) | ![Pose Turbo Output](examples/z-image-turbo-control-pose.png) | ![Pose Distill Output](examples/z-image-distill-control-pose.png) |
 
 Note:
 - generated with `--negative-prompt "卡通,油画质感,低分辨率,塑料材质,光滑"` and `--control-scale 0.75`
-- ControlNet weights: `alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1`
-- Control file: `Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors`
-- Upstream `8steps` examples pair that file with `--steps 8`
+- Turbo ControlNet:
+  - ControlNet weights: `alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1`
+  - Control file: `Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors`
+- Distill ControlNet:
+  - ControlNet weights: `alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1`
+  - Control file: `Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors`
+
 
 ## Quickstart
 
