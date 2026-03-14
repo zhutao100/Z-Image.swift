@@ -15,15 +15,7 @@ import XCTest
       .deletingLastPathComponent()
       .deletingLastPathComponent()
 
-    private static let outputDir: URL = {
-      let url =
-        projectRoot
-        .appendingPathComponent("Tests")
-        .appendingPathComponent("ZImageIntegrationTests")
-        .appendingPathComponent("Resources")
-      try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-      return url
-    }()
+    private static let outputDir = integrationTestOutputDirectory("ControlNetIntegrationTests")
 
     override class func setUp() {
       super.setUp()

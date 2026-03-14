@@ -5,13 +5,7 @@ import XCTest
 
 final class LoRAIntegrationTests: XCTestCase {
   nonisolated(unsafe) private static var sharedPipeline: ZImagePipeline?
-  private static let outputDir: URL = {
-    let url = FileManager.default.temporaryDirectory
-      .appendingPathComponent("ZImageIntegrationTests")
-      .appendingPathComponent("LoRAIntegrationTests")
-    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    return url
-  }()
+  private static let outputDir = integrationTestOutputDirectory("LoRAIntegrationTests")
   override class func setUp() {
     super.setUp()
 

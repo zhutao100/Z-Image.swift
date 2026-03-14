@@ -11,22 +11,7 @@ final class PipelineIntegrationTests: XCTestCase {
   /// Shared pipeline instance to avoid reloading model for each test
   private nonisolated(unsafe) static var sharedPipeline: ZImagePipeline?
 
-  /// Project root directory (derived from test file location)
-  private static let projectRoot: URL = URL(fileURLWithPath: #file)
-    .deletingLastPathComponent()  // Remove PipelineIntegrationTests.swift
-    .deletingLastPathComponent()  // Remove ZImageIntegrationTests
-    .deletingLastPathComponent()  // Remove Tests -> project root
-
-  /// Output directory for test-generated images (inside project)
-  private static let outputDir: URL = {
-    let url =
-      projectRoot
-      .appendingPathComponent("Tests")
-      .appendingPathComponent("ZImageIntegrationTests")
-      .appendingPathComponent("Resources")
-    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    return url
-  }()
+  private static let outputDir = integrationTestOutputDirectory("PipelineIntegrationTests")
 
   /// Initialize shared pipeline once for all tests
   override class func setUp() {
@@ -39,7 +24,7 @@ final class PipelineIntegrationTests: XCTestCase {
   override class func tearDown() {
     // Clean up shared pipeline
     sharedPipeline = nil
-    // Clean up Resources directory after all tests
+    // Clean up generated outputs after all tests
     try? FileManager.default.removeItem(at: outputDir)
     super.tearDown()
   }

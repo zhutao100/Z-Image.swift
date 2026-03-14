@@ -127,3 +127,11 @@ func ensureMLXMetalLibraryColocated(for testCase: AnyClass) throws {
   _ = try? FileManager.default.removeItem(at: colocated)
   try FileManager.default.copyItem(at: built, to: colocated)
 }
+
+func integrationTestOutputDirectory(_ suiteName: String) -> URL {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent("ZImageIntegrationTests", isDirectory: true)
+    .appendingPathComponent(suiteName, isDirectory: true)
+  try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+  return url
+}

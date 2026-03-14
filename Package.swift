@@ -71,10 +71,7 @@ let package = Package(
         "ZImage",
         .product(name: "MLX", package: "mlx-swift"),
       ],
-      path: "Tests/ZImageIntegrationTests",
-      resources: [
-        .copy("Resources")
-      ]
+      path: "Tests/ZImageIntegrationTests"
     ),
     .testTarget(
       name: "ZImageE2ETests",
