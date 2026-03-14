@@ -26,7 +26,21 @@ enum HuggingFaceHubError: Error, LocalizedError {
 
 enum HuggingFaceHub {
   static func cacheDirectory() -> URL {
-    HubCache.default.cacheDirectory
+    if let hubCache = environmentVariable(named: "HF_HUB_CACHE"), !hubCache.isEmpty {
+      return URL(fileURLWithPath: NSString(string: hubCache).expandingTildeInPath)
+    }
+
+    if let hfHome = environmentVariable(named: "HF_HOME"), !hfHome.isEmpty {
+      return URL(fileURLWithPath: NSString(string: hfHome).expandingTildeInPath)
+        .appendingPathComponent("hub")
+    }
+
+    return HubCache.default.cacheDirectory
+  }
+
+  private static func environmentVariable(named name: String) -> String? {
+    guard let value = getenv(name) else { return nil }
+    return String(cString: value)
   }
 
   static func resolveSnapshotDirectory(
@@ -86,7 +100,8 @@ enum HuggingFaceHub {
       throw HuggingFaceHubError.invalidRepoId(repoId)
     }
 
-    let cache = cacheDirectory.map { HubCache(cacheDirectory: $0) } ?? .default
+    let resolvedCacheDirectory = cacheDirectory ?? Self.cacheDirectory()
+    let cache = HubCache(cacheDirectory: resolvedCacheDirectory)
 
     if offline {
       guard let cached = resolveSnapshotDirectory(cache: cache, repo: repo, kind: kind, revision: revision) else {
