@@ -169,9 +169,9 @@ The relevant code is in `Sources/ZImage/Pipeline/ZImagePipeline.swift`.
 Current fail-closed behavior:
 
 - local or cached directories with multiple `.safetensors` files are rejected unless `--control-file` selects one explicitly
+- local or cached directories with exactly one `.safetensors` file auto-select that file
 - the current Z-Image Fun Base support target is the full Union 2.1 file:
   - `Z-Image-Fun-Controlnet-Union-2.1.safetensors`
-- the known repo id `alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1` requires `--control-file` even if the local Hugging Face cache currently contains only the full Union file
 - the current upstream Lite and Tile filenames for the Z-Image Fun Base family are rejected explicitly instead of loading under the full-Union assumptions
 - selected ControlNet weights are also validated against the current full-layout contract:
   - `15` control layer blocks
@@ -200,7 +200,8 @@ Current fail-closed behavior:
 
 - local directories with multiple `.safetensors` files are rejected unless the path resolves to a specific file
 - Hugging Face LoRA repos with multiple `.safetensors` files are rejected unless `--lora-file` or `LoRAConfiguration.huggingFace(..., filename:)` selects one explicitly
-- the known repo id `alibaba-pai/Z-Image-Fun-Lora-Distill` requires an explicit filename even if the local Hugging Face cache currently contains only one downloaded adapter file
+- local directories or cached snapshots with exactly one `.safetensors` file auto-select that file
+- for the validated Distill adapter path `Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors`, the CLI auto-applies the upstream `8 / 1.0 / 0.8` recipe when `steps`, `guidance`, or `loraScale` are omitted
 - LoRA loads that map zero valid Swift target layers fail with an incompatibility error instead of proceeding as a silent no-op
 
 Source of truth:

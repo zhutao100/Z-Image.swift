@@ -75,6 +75,7 @@ Note:
 - generated with `--negative-prompt "卡通,油画质感,低分辨率,塑料材质,光滑"` and `--control-scale 0.75`
 - ControlNet weights: `alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1`
 - Control file: `Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors`
+- Upstream `8steps` examples pair that file with `--steps 8`
 
 ## Quickstart
 
@@ -137,8 +138,8 @@ Text-to-image LoRA:
 ```
 
 When a LoRA repo or local directory contains multiple `.safetensors` files, `--lora-file` is required so the adapter selection stays deterministic.
-For the validated Distill adapter path `Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors`, the CLI now warns toward the upstream `--steps 8 --guidance 1.0 --lora-scale 0.8` recipe without overriding your flags automatically.
-For the known multi-file repo id `alibaba-pai/Z-Image-Fun-Lora-Distill`, `--lora-file` is required even if your local Hugging Face cache currently contains only one downloaded adapter file.
+If a cached Distill snapshot contains exactly one `.safetensors` file, omitting `--lora-file` is now allowed; genuinely ambiguous sources still fail closed.
+For the validated Distill adapter path `Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors`, the CLI now auto-applies the upstream `--steps 8 --guidance 1.0 --lora-scale 0.8` recipe when those flags are omitted, and warns when it does so.
 
 ControlNet:
 
@@ -148,11 +149,11 @@ ControlNet:
   --control-image /path/to/pose.jpg \
   --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
   --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
+  --steps 8 \
   --output control.png
 ```
 
-When a ControlNet repo or local directory contains multiple `.safetensors` files, `--control-file` is required. The current Z-Image Fun Base support target is the full Union 2.1 file `Z-Image-Fun-Controlnet-Union-2.1.safetensors`; upstream Lite and Tile filenames are rejected explicitly for now.
-For the known multi-file repo id `alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1`, `--control-file` is required even if your local Hugging Face cache currently contains only the full Union file.
+When a ControlNet repo or local directory contains multiple `.safetensors` files, `--control-file` is required. If a cached snapshot contains exactly one `.safetensors` file, omitting `--control-file` is allowed. The current Z-Image Fun Base support target is the full Union 2.1 file `Z-Image-Fun-Controlnet-Union-2.1.safetensors`; upstream Lite and Tile filenames are rejected explicitly for now.
 
 Staging daemon:
 
@@ -201,7 +202,8 @@ Common CLI knobs:
 - `--width/-W`, `--height/-H`: output size; values must be at least `64` and divisible by `16`
 - `--steps/-s`: literal denoising iterations / transformer forwards
   - the scheduler keeps one extra terminal sigma internally, so `8` steps means `8` transformer calls and `9` sigma values
-  - some upstream model cards mix that scheduler detail into the prose around Turbo's "8-step" distillation; this repo treats `steps` as the literal iteration count
+  - this repo and Diffusers both treat `steps` / `num_inference_steps` as the literal denoising-iteration count
+  - the upstream plain Turbo examples use `9`, while the upstream Distill and Fun ControlNet `8steps` examples use `8`; those are artifact-specific recipes, not different meanings of the flag
 - `--guidance/-g`: CFG scale
 - `--cfg-normalization`: clamp CFG output norm back to the positive-branch norm
 - `--cfg-truncation`: disable CFG once the normalized denoising timestep passes the given threshold

@@ -61,13 +61,13 @@ Practical implication: unlike SD/SDXL (CLIP encoders) or FLUX variants (often T5
 ## `scheduler/` — sampler parameters
 
 
-- **Class:** `FlowMatchEulerDiscreteScheduler` with a minimal config (e.g., `num_train_timesteps`, `shift`, `use_dynamic_shifting`). The **few-step behavior** (≈8 forwards) comes from the **distilled model and runtime num_inference_steps**, not from the config alone. [Hugging Face+1](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/scheduler/scheduler_config.json)
+- **Class:** `FlowMatchEulerDiscreteScheduler` with a minimal config (e.g., `num_train_timesteps`, `shift`, `use_dynamic_shifting`). The few-step behavior comes from the distilled model plus the runtime `num_inference_steps`; the scheduler also appends one terminal sigma internally, but that does not change the denoising-loop count. [Hugging Face+1](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/scheduler/scheduler_config.json)
 
 ## `README.md` — usage and design notes worth keeping
 
 
 - **Architecture:** “Scalable **Single-Stream DiT**” (S3-DiT). [Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/README.md)
-- **Few-step generation:** example uses `num_inference_steps=9` which leads to *8 DiT forwards*; set `guidance_scale=0.0` for Turbo variants. [Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/README.md)
+- **Few-step generation:** the upstream Turbo README example uses `num_inference_steps=9` with `guidance_scale=0.0`. Official upstream Distill and Turbo Fun ControlNet `8steps` examples instead use `8`. Treat that as artifact-specific guidance, not as two different meanings of `num_inference_steps`. [Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/README.md)
 - **Environment:** recommends latest Diffusers (source install) and optional Flash-Attention backends. [Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/README.md)
 
 
@@ -96,5 +96,5 @@ Practical implication: unlike SD/SDXL (CLIP encoders) or FLUX variants (often T5
 
 
 1. **Sharding & indices.** Where weights exceed a few GB, expect `*-0000X-of-0000Y.safetensors` with a `*.index.json` that maps tensor names to shard files; Diffusers resolves this automatically via `from_pretrained`. Verified for both the **transformer** and **text_encoder** in Z-Image-Turbo. [Hugging Face+1](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/transformer)
-2. **Few-step sampling.** The **8-forward** behavior comes from **distillation** + **FlowMatch** and the **runtime** `num_inference_steps`; follow the README recipe (`guidance_scale=0.0`, `num_inference_steps≈9`). [Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/README.md)
+2. **Few-step sampling.** Follow the recipe for the specific artifact you are using. Plain Turbo examples currently use `guidance_scale=0.0` and `num_inference_steps=9`; Distill and Turbo Fun ControlNet `8steps` examples use `8`. In both Diffusers and this repo, `num_inference_steps` is the literal denoising-step count. [Hugging Face](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/README.md)
 3. **Upstream support.** Use a recent Diffusers (the README points to source install) because **ZImagePipeline** and **ZImageTransformer2DModel** landed in late Nov-2025 PRs. [Hugging Face+1](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/README.md)

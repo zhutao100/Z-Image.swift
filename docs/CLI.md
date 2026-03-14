@@ -155,6 +155,7 @@ The CLI applies model-aware defaults for the built-in `Tongyi-MAI` model ids:
 - `Tongyi-MAI/Z-Image`: `1024x1024`, `50` steps, guidance `4.0`
 
 `--steps` is the literal denoising-iteration count in this repo. The scheduler keeps one extra terminal sigma internally, so `8` steps means `8` transformer forwards and `9` sigma values.
+That extra terminal sigma does not change the meaning of the flag: Diffusers and this repo both treat `steps` / `num_inference_steps` as the actual denoising-loop count. The current upstream plain Turbo examples use `9`, while the Distill and Turbo Fun ControlNet `8steps` examples use `8`.
 
 Explicit flags still override those values field by field. Example:
 
@@ -167,7 +168,7 @@ Explicit flags still override those values field by field. Example:
 
 Important nuance: preset lookup now covers known ids, inspectable local or cached snapshots, and common Z-Image-style aliases. Completely unrecognized models still keep the Turbo-compatible preset unless you set the relevant flags explicitly.
 
-LoRA nuance: third-party adapter cards can recommend sampling settings that differ from the base-model defaults. The CLI does not auto-parse adapter README files into presets, but it now emits a known-adapter warning for the validated `Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors` path with the recommended `--steps 8 --guidance 1.0 --lora-scale 0.8` recipe.
+LoRA nuance: third-party adapter cards can recommend sampling settings that differ from the base-model defaults. For the validated `Z-Image-Fun-Lora-Distill-8-Steps-2603.safetensors` path, the CLI now auto-applies the recommended `--steps 8 --guidance 1.0 --lora-scale 0.8` recipe when those flags are omitted, and warns when it does so.
 
 ## Model Specs (`--model`)
 
@@ -198,8 +199,7 @@ Text-to-image LoRA usage:
 
 `--lora` accepts a local path or a Hugging Face repo id. The same `--lora` and `--lora-scale` flags are also available on `ZImageCLI control`.
 
-When the LoRA source is a local directory or Hugging Face snapshot that contains multiple `.safetensors` files, `--lora-file` is now required. The loader no longer picks an arbitrary file or merges multiple LoRA files implicitly.
-For the known multi-file repo id `alibaba-pai/Z-Image-Fun-Lora-Distill`, `--lora-file` is required even when the local cache only contains one previously downloaded adapter file.
+When the LoRA source is a local directory or Hugging Face snapshot that contains multiple `.safetensors` files, `--lora-file` is required. The loader no longer picks an arbitrary file or merges multiple LoRA files implicitly. If the resolved local directory or cached snapshot contains exactly one `.safetensors`, omitting `--lora-file` is allowed.
 
 Example for the validated Distill adapter path:
 
@@ -233,6 +233,7 @@ Minimal ControlNet example:
   --control-image /path/to/pose.jpg \
   --controlnet-weights alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \
   --control-file Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors \
+  --steps 8 \
   --output control.png
 ```
 
@@ -242,8 +243,8 @@ For `alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1`, the initial supported file i
 Z-Image-Fun-Controlnet-Union-2.1.safetensors
 ```
 
-The loader now rejects ambiguous multi-file ControlNet sources unless `--control-file` is set, and it rejects the current upstream Lite and Tile filenames for the Z-Image Fun Base family.
-For the known multi-file repo id `alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1`, `--control-file` is required even when the local cache only contains the full Union file.
+The loader now rejects ambiguous multi-file ControlNet sources unless `--control-file` is set, and it rejects the current upstream Lite and Tile filenames for the Z-Image Fun Base family. If the resolved local directory or cached snapshot contains exactly one `.safetensors`, omitting `--control-file` is allowed.
+For the Turbo Fun ControlNet `*-8steps.safetensors` files, current upstream examples use `--steps 8`.
 
 Inpainting example:
 

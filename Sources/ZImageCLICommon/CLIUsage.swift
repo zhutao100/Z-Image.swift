@@ -216,7 +216,7 @@ public enum CLIUsageFormatter {
         # T2I with pose control using v2.1 weights (recommended)
         \(executable) control -p "a woman on a beach" -c pose.jpg \\
           --cw alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1 \\
-          --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors
+          --cf Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors -s 8
 
         # I2I inpainting with pose control
         \(executable) control -p "a dancer" -c pose.jpg -i photo.jpg --mask mask.png \\

@@ -35,15 +35,15 @@ The upstream Hugging Face Distill repo currently publishes multiple normal LoRA 
 - ComfyUI exports
 - older `2602` and pre-`2602` variants
 
-The current Swift CLI only exposes `--lora`, not a paired filename selector. Programmatic support exists in `LoRAConfiguration.huggingFace(modelId, filename:)`, but the user-facing CLI, batch manifest, and staged submission shapes do not currently expose that choice.
+The current Swift CLI, batch manifest, and staged submission shapes now expose `--lora-file` / `loraFile`, matching the programmatic `LoRAConfiguration.huggingFace(modelId, filename:)` path.
 
-As a result, the repo cannot currently claim clean direct support for `alibaba-pai/Z-Image-Fun-Lora-Distill` by Hugging Face repo id alone.
+The repo can now resolve `alibaba-pai/Z-Image-Fun-Lora-Distill` by repo id when the resolved local directory or cached snapshot contains exactly one `.safetensors` file. Ambiguous sources still need an explicit filename.
 
-The same issue now exists on the ControlNet side in a different form: the full Union repo contains full, lite, and tile `.safetensors` files side by side, while the current control loader merges every `.safetensors` file in a directory if no preferred file is selected.
+The same issue exists on the ControlNet side in a different form: the full Union repo contains full, lite, and tile `.safetensors` files side by side. The current control loader now rejects ambiguous directories or snapshots instead of merging every `.safetensors` file together.
 
 That means deterministic file selection is required on both adapter families:
 
-- `--lora-file` is missing and must be added
+- `--lora-file` must exist for ambiguous LoRA sources, while exact-one cached/local snapshots can auto-select
 - ambiguous multi-file ControlNet sources should be rejected or forced to specify `--control-file`
 
 ### 3. The uploaded Distill LoRA key format is a current blocker, not a likely risk
@@ -175,18 +175,18 @@ Also reject ambiguous multi-file ControlNet sources unless the intended file is 
 
 ### D. Adapter-aware presets and warnings
 
-#### Optional but useful
+#### Implemented for the validated Distill target
 
 The current CLI already warns when LoRA is used with model defaults, because adapter cards can require different sampling.
 
-For `alibaba-pai/Z-Image-Fun-Lora-Distill`, the upstream guidance is concrete enough that the repo could optionally add a known-adapter warning or preset hint:
+For `alibaba-pai/Z-Image-Fun-Lora-Distill`, the upstream guidance is concrete enough that the repo now auto-applies the known recipe only when the caller left those fields unset:
 
 - `steps = 8`
 - `guidance = 1.0`
 - `lora_scale ~= 0.8`
 - prefer the current simple scheduler path
 
-This should remain a warning or opt-in preset layer rather than an implicit forced override.
+Explicit user-provided overrides still win field by field, and the CLI warns when the final request diverges from the documented recipe.
 
 #### Likely files
 
