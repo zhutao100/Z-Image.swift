@@ -398,7 +398,7 @@ select_kernels() {
     steel/attn/kernels/steel_attention
   )
 
-  append_kernel_if_present "steel_conv_3d"
+  append_kernel_if_present "steel/conv/kernels/steel_conv_3d"
 
   if version_ge "$METAL_VERSION" "320"; then
     append_kernel_if_present "fence"
