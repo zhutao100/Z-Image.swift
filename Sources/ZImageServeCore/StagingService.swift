@@ -528,14 +528,27 @@ actor SerialServiceCoordinator {
   }
 
   private func ensureWorker(for profile: WorkerProfile) async throws -> ResidentWorker {
+    var effectiveProfile = profile
     if let residentWorker {
-      if residentWorker.profile == profile {
-        if shouldEvictAdaptiveWorker(profile: profile) {
+      if effectiveProfile.model == nil { effectiveProfile.model = residentWorker.profile.model }
+      if effectiveProfile.weightsVariant == nil { effectiveProfile.weightsVariant = residentWorker.profile.weightsVariant }
+      if effectiveProfile.controlnetWeights == nil { effectiveProfile.controlnetWeights = residentWorker.profile.controlnetWeights }
+      if effectiveProfile.controlnetFile == nil { effectiveProfile.controlnetFile = residentWorker.profile.controlnetFile }
+    } else if let warm = warmProfile() {
+      if effectiveProfile.model == nil { effectiveProfile.model = warm.model }
+      if effectiveProfile.weightsVariant == nil { effectiveProfile.weightsVariant = warm.weightsVariant }
+      if effectiveProfile.controlnetWeights == nil { effectiveProfile.controlnetWeights = warm.controlnetWeights }
+      if effectiveProfile.controlnetFile == nil { effectiveProfile.controlnetFile = warm.controlnetFile }
+    }
+
+    if let residentWorker {
+      if residentWorker.profile == effectiveProfile {
+        if shouldEvictAdaptiveWorker(profile: effectiveProfile) {
           logger.info("Evicting adaptive worker before reuse due to low available memory")
           await residentWorker.worker.unload()
           self.residentWorker = nil
         } else {
-          logger.info("Reusing resident \(profile.kind.rawValue) worker")
+          logger.info("Reusing resident \(effectiveProfile.kind.rawValue) worker")
           self.residentWorker?.lastUsedAt = Date()
           return residentWorker.worker
         }
@@ -546,8 +559,8 @@ actor SerialServiceCoordinator {
       }
     }
 
-    let worker = try await makeWorker(for: profile)
-    residentWorker = .init(profile: profile, worker: worker, lastUsedAt: Date())
+    let worker = try await makeWorker(for: effectiveProfile)
+    residentWorker = .init(profile: effectiveProfile, worker: worker, lastUsedAt: Date())
     return worker
   }
 
@@ -659,8 +672,11 @@ private actor TextServeWorker {
       runtimeOptions: .init(residencyPolicy: profile.residencyPolicy)
     )
     CLICommandRunner.configureCacheLimit(options.cacheLimit, logger: logger)
+    var request = plan.request
+    if request.model == nil { request.model = profile.model }
+    if request.weightsVariant == nil { request.weightsVariant = profile.weightsVariant }
     return try await pipeline.generate(
-      plan.request,
+      request,
       progressHandler: { progress in
         guard progress.stage == .denoising else { return }
         progressSink(
@@ -714,6 +730,10 @@ private actor ControlServeWorker {
     CLICommandRunner.configureCacheLimit(options.cacheLimit, logger: logger)
 
     var request = plan.request
+    if request.model == nil { request.model = profile.model }
+    if request.weightsVariant == nil { request.weightsVariant = profile.weightsVariant }
+    if request.controlnetWeights == nil { request.controlnetWeights = profile.controlnetWeights }
+    if request.controlnetWeightsFile == nil { request.controlnetWeightsFile = profile.controlnetFile }
     request.progressCallback = { progress in
       if progress.stage == "Denoising" {
         progressSink(
